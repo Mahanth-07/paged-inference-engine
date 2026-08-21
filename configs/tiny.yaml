@@ -1,0 +1,12 @@
+# Random-weight micro-model for CPU/MPS correctness tests on the MacBook.
+# Small enough that the naive attention reference is fast and the whole thing fits in RAM.
+model:
+  model: __random__
+  dtype: float32
+  max_model_len: 256
+  hidden_size: 128
+  num_layers: 2
+  num_heads: 4
+  num_kv_heads: 2      # GQA ratio 2 -- do NOT set this equal to num_heads, or your
+  head_dim: 32         # tests will pass with a broken GQA head mapping
+  intermediate_size: 256
