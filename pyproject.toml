@@ -1,1 +1,22 @@
 [build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paged-inference-engine"
+version = "0.1.0"
+description = "A from-scratch LLM inference engine: paged KV cache, continuous batching, custom kernels."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+# Laptop: block manager + scheduler + simulator + tests. No torch needed.
+dev = ["pytest", "pytest-xdist", "ruff"]
+# Laptop + torch: also runs the CPU fixture-model engine tests (paging, chunked
+# prefill, preemption, prefix caching) -- the highest-value tests in the repo, and
+# they need no GPU.
+cpu = ["torch", "fastapi", "httpx", "transformers", "safetensors"]
+# Rented GPU box.
