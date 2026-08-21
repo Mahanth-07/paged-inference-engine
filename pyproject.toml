@@ -20,3 +20,23 @@ dev = ["pytest", "pytest-xdist", "ruff"]
 # they need no GPU.
 cpu = ["torch", "fastapi", "httpx", "transformers", "safetensors"]
 # Rented GPU box.
+gpu = [
+    "torch",
+    "transformers",
+    "safetensors",
+    "triton",
+    "flashinfer-python",
+    "flash-attn",
+    "fastapi",
+    "uvicorn",
+]
+# Benchmarking (client + baselines + plots). vllm is the comparison target.
+bench = ["aiohttp", "uvloop", "matplotlib", "pandas", "vllm", "datasets"]
+
+[project.scripts]
+paged-inference-engine = "paged_inference_engine.entrypoints.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["paged_inference_engine*"]
+
+[tool.pytest.ini_options]
