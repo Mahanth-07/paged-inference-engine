@@ -10,3 +10,16 @@ model:
   num_kv_heads: 2      # GQA ratio 2 -- do NOT set this equal to num_heads, or your
   head_dim: 32         # tests will pass with a broken GQA head mapping
   intermediate_size: 256
+  vocab_size: 1000
+
+cache:
+  block_size: 16
+  num_gpu_blocks: 64   # deliberately tiny, to force preemption in tests
+
+scheduler:
+  max_num_batched_tokens: 128
+  max_num_seqs: 8
+  enable_chunked_prefill: true
+
+attention_backend: naive
+device: cpu
