@@ -94,3 +94,5 @@ class EngineConfig:
             model=ModelConfig(**raw.get("model", {})),
             cache=CacheConfig(**raw.get("cache", {})),
             scheduler=SchedulerConfig(**raw.get("scheduler", {})),
+            **{k: v for k, v in raw.items() if k not in ("model", "cache", "scheduler")},
+        )
