@@ -54,3 +54,23 @@ class CacheConfig:
 
 @dataclass
 class SchedulerConfig:
+    max_num_batched_tokens: int = 8192
+    """Token budget per forward pass. The main throughput/latency dial."""
+
+    max_num_seqs: int = 256
+    """Max sequences in a running batch."""
+
+    enable_chunked_prefill: bool = True
+    """Cap prefill tokens per step so long prompts don't stall decodes. Big ITL p99 win."""
+
+    max_num_partial_prefills: int = 1
+
+    preemption_mode: Literal["recompute", "swap"] = "recompute"
+
+    policy: Literal["fcfs", "priority"] = "fcfs"
+
+
+@dataclass
+class EngineConfig:
+    model: ModelConfig = field(default_factory=ModelConfig)
+    cache: CacheConfig = field(default_factory=CacheConfig)
