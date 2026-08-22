@@ -74,3 +74,23 @@ class SchedulerConfig:
 class EngineConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
+    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+
+    attention_backend: AttentionBackend = "naive"
+    enforce_eager: bool = True
+    """False enables CUDA graph capture for the decode path (M5)."""
+
+    cuda_graph_batch_sizes: tuple[int, ...] = (1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256)
+
+    device: str = "cuda"
+
+    @classmethod
+    def from_yaml(cls, path: str) -> "EngineConfig":
+        import yaml
+
+        with open(path) as f:
+            raw = yaml.safe_load(f) or {}
+        return cls(
+            model=ModelConfig(**raw.get("model", {})),
+            cache=CacheConfig(**raw.get("cache", {})),
+            scheduler=SchedulerConfig(**raw.get("scheduler", {})),
