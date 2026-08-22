@@ -34,3 +34,23 @@ class ModelConfig:
         assert self.num_kv_heads > 0
         return self.num_heads // self.num_kv_heads
 
+
+@dataclass
+class CacheConfig:
+    block_size: int = 16
+    """Tokens per physical block. Ablate {8, 16, 32, 64} in M4."""
+
+    gpu_memory_utilization: float = 0.90
+    """Fraction of total VRAM the engine may use. Blocks = (budget - weights - activations) / bytes_per_block."""
+
+    num_gpu_blocks: Optional[int] = None
+    """Set explicitly to make benchmarks deterministic; otherwise profiled at startup."""
+
+    enable_prefix_caching: bool = False
+    """M5. Requires content-hashing blocks and refcounting."""
+
+    kv_cache_dtype: str = "auto"  # "auto" | "fp8"
+
+
+@dataclass
+class SchedulerConfig:
