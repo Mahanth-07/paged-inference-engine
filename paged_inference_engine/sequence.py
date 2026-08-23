@@ -36,3 +36,24 @@ class Sequence:
     seq_id: int = field(default_factory=lambda: next(_counter))
 
     output_token_ids: list[int] = field(default_factory=list)
+    status: SequenceStatus = SequenceStatus.WAITING
+
+    block_table: list[int] = field(default_factory=list)
+    """logical block index -> physical block id. Owned by BlockManager."""
+
+    num_computed_tokens: int = 0
+    """How many tokens already have KV in the cache. With chunked prefill this
+    advances in chunks during prefill; afterwards it tracks generation."""
+
+    # Timestamps for metrics (set by the engine).
+    arrival_time: float = 0.0
+    first_token_time: Optional[float] = None
+    finish_time: Optional[float] = None
+    token_times: list[float] = field(default_factory=list)
+
+    num_preemptions: int = 0
+    finish_reason_detail: Optional[str] = None
+
+    # ---- token accounting -------------------------------------------------
+
+    @property
