@@ -77,3 +77,23 @@ class Sequence:
         return self.total_len - self.num_computed_tokens
 
     @property
+    def is_prefill(self) -> bool:
+        """True while this sequence still has tokens whose KV is not in the cache.
+
+        The bound is total_len, NOT prompt_len. They are the same for a fresh request,
+        but a sequence preempted by recompute has thrown away the KV for its already
+        GENERATED tokens too, and those have to be recomputed before it can decode
+        again. Using prompt_len here means a preempted sequence resumes decoding with
+        a hole in its cache: the output stays fluent and is quietly wrong from the
+        preemption point onward.
+        """
+        return self.num_computed_tokens < self.total_len
+
+    def num_blocks(self, block_size: int) -> int:
+        return (self.total_len + block_size - 1) // block_size
+
+    def last_block_occupancy(self, block_size: int) -> int:
+        """Tokens used in the final block. In [1, block_size]. FlashInfer calls
+        this kv_last_page_len and requires it to be > 0."""
+        r = self.total_len % block_size
+        return r if r else block_size
