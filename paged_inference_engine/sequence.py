@@ -97,3 +97,24 @@ class Sequence:
         this kv_last_page_len and requires it to be > 0."""
         r = self.total_len % block_size
         return r if r else block_size
+
+    # ---- slot mapping -----------------------------------------------------
+
+    def slot_for_token(self, token_index: int, block_size: int) -> int:
+        """Flat index into the paged cache for logical position `token_index`.
+
+        This one line is the whole idea of paging: a logical position maps to
+        (block, offset) and the physical location is block_table[block] * block_size + offset.
+        """
+        logical_block = token_index // block_size
+        offset = token_index % block_size
+        return self.block_table[logical_block] * block_size + offset
+
+    # ---- mutation ---------------------------------------------------------
+
+    def append_token(self, token_id: int, now: float = 0.0) -> None:
+        self.output_token_ids.append(token_id)
+        self.num_computed_tokens += 1
+        if self.first_token_time is None:
+            self.first_token_time = now
+        self.token_times.append(now)
