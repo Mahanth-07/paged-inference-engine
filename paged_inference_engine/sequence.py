@@ -118,3 +118,24 @@ class Sequence:
         if self.first_token_time is None:
             self.first_token_time = now
         self.token_times.append(now)
+
+    def reset_for_recompute(self) -> None:
+        """Recompute-based preemption: drop all cached KV, keep generated tokens, and
+        re-prefill prompt AND generated tokens from scratch on readmission.
+
+        Why recompute usually beats swapping to CPU on modern hardware: prefill is
+        compute-bound and enormously parallel, while a swap is a PCIe round trip of the
+        whole context in both directions. Recompute also frees the blocks immediately,
+        which is the thing you were short of."""
+        self.num_computed_tokens = 0
+        self.block_table = []
+        self.status = SequenceStatus.PREEMPTED
+        self.num_preemptions += 1
+
+    def check_finished(self, eos_token_id: Optional[int]) -> bool:
+        sp = self.sampling_params
+        if self.output_len >= sp.max_tokens:
+            self.status = SequenceStatus.FINISHED_LENGTH
+            return True
+        if self.output_len < sp.min_tokens or sp.ignore_eos:
+            return False
