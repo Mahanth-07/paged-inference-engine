@@ -57,3 +57,23 @@ class Sequence:
     # ---- token accounting -------------------------------------------------
 
     @property
+    def prompt_len(self) -> int:
+        return len(self.prompt_token_ids)
+
+    @property
+    def output_len(self) -> int:
+        return len(self.output_token_ids)
+
+    @property
+    def total_len(self) -> int:
+        return self.prompt_len + self.output_len
+
+    @property
+    def all_token_ids(self) -> list[int]:
+        return self.prompt_token_ids + self.output_token_ids
+
+    @property
+    def num_uncomputed_tokens(self) -> int:
+        return self.total_len - self.num_computed_tokens
+
+    @property
