@@ -159,3 +159,8 @@ class RequestOutput:
     seq_id: int
     prompt_token_ids: list[int]
     token_ids: list[int]
+    text: str = ""
+    delta_text: str = ""
+    new_token_ids: list[int] = field(default_factory=list)
+    finished: bool = False
+    finish_reason: Optional[str] = None
