@@ -14,3 +14,23 @@ Reference counting exists so two sequences can share blocks: identical prefixes
 (prefix caching) or forked sequences (beam search / parallel sampling). A block
 returns to the free list only when its refcount hits zero.
 """
+
+from __future__ import annotations
+
+from collections import OrderedDict, deque
+from dataclasses import dataclass
+from typing import Iterable, Optional
+
+from .sequence import Sequence
+
+
+class OutOfBlocksError(RuntimeError):
+    pass
+
+
+class BlockAllocator:
+    """Free-list allocator over physical block ids with reference counting.
+
+    Three states a block can be in, and the third one is what makes prefix caching
+    work across requests:
+
