@@ -139,3 +139,23 @@ class Sequence:
             return True
         if self.output_len < sp.min_tokens or sp.ignore_eos:
             return False
+        if self.output_token_ids:
+            last = self.output_token_ids[-1]
+            if last in sp.stop_token_ids or (eos_token_id is not None and last == eos_token_id):
+                self.status = SequenceStatus.FINISHED_STOPPED
+                return True
+        return False
+
+
+@dataclass
+class RequestOutput:
+    """One engine step's worth of news about a request.
+
+    `delta_text` is what streaming sends; `text` is the full text so far. The engine
+    emits one of these per sequence per step, not just at the end, because TTFT is
+    only measurable if the first token leaves the engine the instant it exists.
+    """
+
+    seq_id: int
+    prompt_token_ids: list[int]
+    token_ids: list[int]
