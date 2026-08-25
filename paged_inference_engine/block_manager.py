@@ -54,3 +54,24 @@ class BlockAllocator:
         self._evictable: OrderedDict[int, int] = OrderedDict()   # block_id -> content hash
         self._block_hash: dict[int, int] = {}                    # block_id -> content hash
         self._hash_to_block: dict[int, int] = {}                 # content hash -> block_id
+        self.num_evictions = 0
+
+    # ---- core ops ---------------------------------------------------------
+
+    def allocate(self) -> int:
+        """Take a free block; if there are none, evict the least recently used cached one."""
+        if self._free:
+            block_id = self._free.popleft()
+        elif self._evictable:
+            block_id, _ = self._evictable.popitem(last=False)     # LRU
+            self._drop_hash(block_id)
+            self.num_evictions += 1
+        else:
+            raise OutOfBlocksError("no free blocks")
+        self._ref_count[block_id] = 1
+        return block_id
+
+    # ---- content hashing (prefix caching) ---------------------------------
+
+    def register_hash(self, block_id: int, content_hash: int) -> None:
+        """Publish an allocated block as holding known, ALREADY COMPUTED content.
