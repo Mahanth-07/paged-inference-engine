@@ -75,3 +75,24 @@ class BlockAllocator:
 
     def register_hash(self, block_id: int, content_hash: int) -> None:
         """Publish an allocated block as holding known, ALREADY COMPUTED content.
+
+        Two rules, both load-bearing:
+          - only FULL blocks -- a partial block's contents can still change;
+          - only AFTER the forward pass that filled it. Publishing at allocation time
+            is a real bug: a second request could hit the hash and read KV that has
+            not been written yet, and the resulting output is fluent garbage.
+        """
+        self._block_hash[block_id] = content_hash
+        self._hash_to_block[content_hash] = block_id
+
+    def block_hash(self, block_id: int) -> Optional[int]:
+        return self._block_hash.get(block_id)
+
+    def lookup_hash(self, content_hash: int) -> Optional[int]:
+        """Resolve a content hash to a block that still genuinely holds that content."""
+        block_id = self._hash_to_block.get(content_hash)
+        if block_id is None:
+            return None
+        if self._block_hash.get(block_id) != content_hash:
+            self._hash_to_block.pop(content_hash, None)   # stale entry, clean it up
+            return None
