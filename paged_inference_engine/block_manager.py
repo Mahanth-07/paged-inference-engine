@@ -117,3 +117,24 @@ class BlockAllocator:
     def allocate_many(self, n: int) -> list[int]:
         if n > len(self._free):
             raise OutOfBlocksError(f"requested {n} blocks, {len(self._free)} free")
+        return [self.allocate() for _ in range(n)]
+
+    def incref(self, block_id: int) -> None:
+        if block_id not in self._ref_count:
+            raise KeyError(f"block {block_id} is not allocated")
+        self._ref_count[block_id] += 1
+
+    def free(self, block_id: int) -> None:
+        """Decrement refcount. At zero the block becomes free, or -- if it holds cached
+        content -- evictable, which keeps it reusable until the memory is actually needed."""
+        rc = self._ref_count.get(block_id)
+        if rc is None:
+            raise KeyError(f"double free or unallocated block {block_id}")
+        if rc == 1:
+            del self._ref_count[block_id]
+            h = self._block_hash.get(block_id)
+            if h is None:
+                self._free.append(block_id)
+            else:
+                self._evictable[block_id] = h
+        else:
