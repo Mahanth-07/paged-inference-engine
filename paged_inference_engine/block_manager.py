@@ -138,3 +138,24 @@ class BlockAllocator:
             else:
                 self._evictable[block_id] = h
         else:
+            self._ref_count[block_id] = rc - 1
+
+    def free_many(self, block_ids: Iterable[int]) -> None:
+        for b in block_ids:
+            self.free(b)
+
+    # ---- introspection ----------------------------------------------------
+
+    @property
+    def num_free_blocks(self) -> int:
+        """Blocks the allocator can hand out right now. Evictable blocks count: they are
+        reusable memory, they just happen to still hold something useful."""
+        return len(self._free) + len(self._evictable)
+
+    @property
+    def num_allocated_blocks(self) -> int:
+        return len(self._ref_count)
+
+    @property
+    def num_evictable_blocks(self) -> int:
+        return len(self._evictable)
