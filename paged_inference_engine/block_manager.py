@@ -159,3 +159,24 @@ class BlockAllocator:
     @property
     def num_evictable_blocks(self) -> int:
         return len(self._evictable)
+
+    def ref_count(self, block_id: int) -> int:
+        return self._ref_count.get(block_id, 0)
+
+    def is_shared(self, block_id: int) -> bool:
+        return self.ref_count(block_id) > 1
+
+    def check_invariants(self) -> None:
+        """Call this from tests after every operation. Cheap insurance."""
+        total = len(self._free) + len(self._evictable) + len(self._ref_count)
+        assert total == self.num_blocks, (
+            f"block leak: {len(self._free)} free + {len(self._evictable)} evictable + "
+            f"{len(self._ref_count)} allocated != {self.num_blocks} total"
+        )
+        assert len(set(self._free)) == len(self._free), "duplicate block in free list"
+        assert not (set(self._free) & set(self._ref_count)), "block both free and allocated"
+        assert not (set(self._evictable) & set(self._ref_count)), "block both evictable and live"
+        assert not (set(self._evictable) & set(self._free)), "block both evictable and free"
+        assert all(rc >= 1 for rc in self._ref_count.values()), "non-positive refcount"
+        assert all(b in self._block_hash for b in self._evictable), "evictable block lost its hash"
+
