@@ -96,3 +96,24 @@ class BlockAllocator:
         if self._block_hash.get(block_id) != content_hash:
             self._hash_to_block.pop(content_hash, None)   # stale entry, clean it up
             return None
+        return block_id
+
+    def _drop_hash(self, block_id: int) -> None:
+        h = self._block_hash.pop(block_id, None)
+        if h is not None and self._hash_to_block.get(h) == block_id:
+            del self._hash_to_block[h]
+
+    def touch(self, block_id: int) -> bool:
+        """Reclaim an evictable block by increffing it. Returns False if it is gone."""
+        if block_id in self._evictable:
+            del self._evictable[block_id]
+            self._ref_count[block_id] = 1
+            return True
+        if block_id in self._ref_count:
+            self._ref_count[block_id] += 1
+            return True
+        return False
+
+    def allocate_many(self, n: int) -> list[int]:
+        if n > len(self._free):
+            raise OutOfBlocksError(f"requested {n} blocks, {len(self._free)} free")
