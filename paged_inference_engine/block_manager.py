@@ -221,3 +221,24 @@ class BlockManager:
         if need <= self.allocator.num_free_blocks - self.watermark_blocks:
             return AllocStatus.OK
         return AllocStatus.LATER
+
+    def allocate(self, seq: Sequence) -> None:
+        """Allocate the full block table for a sequence's current token count."""
+        assert not seq.block_table, "sequence already has blocks"
+        need = seq.num_blocks(self.block_size)
+        if self.enable_prefix_caching:
+            seq.block_table = self._allocate_with_prefix_cache(seq, need)
+        else:
+            seq.block_table = self.allocator.allocate_many(need)
+
+    def can_append_slot(self, seq: Sequence) -> bool:
+        """Is there room to write ONE more token's KV for this sequence?
+
+        Call this BEFORE appending the token. Two ways it can need a free block:
+        crossing a block boundary, or copy-on-write of a shared final block.
+        """
+        needed = self._blocks_for(seq.total_len + 1)
+        if needed > len(seq.block_table):
+            return self.allocator.num_free_blocks > 0
+        if seq.block_table and self.allocator.is_shared(seq.block_table[-1]):
+            return self.allocator.num_free_blocks > 0
