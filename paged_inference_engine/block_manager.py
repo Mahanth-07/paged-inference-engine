@@ -200,3 +200,24 @@ class BlockManager:
     ):
         self.block_size = block_size
         self.allocator = BlockAllocator(num_blocks)
+        self.watermark_blocks = int(watermark * num_blocks)
+        """Keep a small reserve free so decodes of already-running sequences can always
+        append a slot. Without this, admitting one more prefill can deadlock the batch."""
+        self.enable_prefix_caching = enable_prefix_caching
+        self.num_cache_hit_blocks = 0
+        self.num_cache_query_blocks = 0
+
+    # ---- admission --------------------------------------------------------
+
+    def _blocks_for(self, num_tokens: int) -> int:
+        return (num_tokens + self.block_size - 1) // self.block_size
+
+    def can_allocate(self, seq: Sequence) -> str:
+        # +1: admitting a sequence commits us to writing at least one generated token
+        # into the cache. Budgeting only for the prompt is how you deadlock at high load.
+        need = self._blocks_for(seq.total_len + 1)
+        if need > self.allocator.num_blocks - self.watermark_blocks:
+            return AllocStatus.NEVER
+        if need <= self.allocator.num_free_blocks - self.watermark_blocks:
+            return AllocStatus.OK
+        return AllocStatus.LATER
