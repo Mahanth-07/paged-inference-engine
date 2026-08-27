@@ -284,3 +284,23 @@ class BlockManager:
 
         Feed this to reshape_and_cache so the model writes each new K/V into the
         right physical location. Off-by-one bugs here produce output that is
+        *almost* right, which is the worst kind of bug -- test it directly.
+        """
+        return [seq.slot_for_token(i, self.block_size) for i in range(start, end)]
+
+    # ---- FlashInfer-style page table --------------------------------------
+
+    def paged_kv_metadata(self, seqs: list[Sequence]) -> dict[str, list[int]]:
+        """Build the CSR page table FlashInfer expects.
+
+        kv_indptr:        (num_seqs + 1,) cumulative page counts
+        kv_indices:       concatenated physical block ids
+        kv_last_page_len: (num_seqs,) tokens used in each sequence's final page, in [1, page_size]
+
+        All three must be int32 on the GPU. Build them once per step; do not rebuild
+        per layer.
+        """
+        indptr = [0]
+        indices: list[int] = []
+        last_page_len: list[int] = []
+        for seq in seqs:
