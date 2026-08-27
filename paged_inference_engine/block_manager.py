@@ -304,3 +304,23 @@ class BlockManager:
         indices: list[int] = []
         last_page_len: list[int] = []
         for seq in seqs:
+            indices.extend(seq.block_table)
+            indptr.append(len(indices))
+            last_page_len.append(seq.last_block_occupancy(self.block_size))
+        return {
+            "kv_indptr": indptr,
+            "kv_indices": indices,
+            "kv_last_page_len": last_page_len,
+        }
+
+    def block_tables_padded(self, seqs: list[Sequence]) -> list[list[int]]:
+        """Dense (num_seqs, max_num_blocks) block table, padded with 0.
+
+        This is the layout vLLM's paged attention kernel wants. Your Triton kernel
+        can take either; dense is simpler to index, CSR wastes less memory.
+        """
+        max_blocks = max((len(s.block_table) for s in seqs), default=0)
+        return [s.block_table + [0] * (max_blocks - len(s.block_table)) for s in seqs]
+
+    # ---- prefix caching ---------------------------------------------------
+
