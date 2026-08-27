@@ -324,3 +324,23 @@ class BlockManager:
 
     # ---- prefix caching ---------------------------------------------------
 
+    def block_content_hash(self, tokens: list[int], prev_hash: Optional[int]) -> int:
+        """Hash a full block's contents, CHAINED with the previous block's hash.
+
+        The chaining is not optional. Without it, block ["the", "cat", ...] hashes the
+        same whether it is the first block of a document or the fifth, so two sequences
+        with the same block content but different prefixes would share KV -- and KV
+        depends on the entire preceding context, so the output would be silently wrong.
+        Chaining makes the hash identify the whole prefix ending at this block.
+        """
+        return hash((prev_hash, tuple(tokens)))
+
+    def _num_cacheable_blocks(self, seq: Sequence) -> int:
+        """How many of a sequence's leading blocks may be served from the cache.
+
+        Only FULL blocks of the PROMPT, and never so many that nothing is left to
+        compute: a sequence whose entire prompt came from the cache would go straight
+        to the decode queue without ever running a forward pass, and would therefore
+        never produce a first token. The `- 1` keeps at least one token of real work.
+        """
+        return max(0, (seq.prompt_len - 1) // self.block_size)
