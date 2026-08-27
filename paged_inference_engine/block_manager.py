@@ -180,3 +180,23 @@ class BlockAllocator:
         assert all(rc >= 1 for rc in self._ref_count.values()), "non-positive refcount"
         assert all(b in self._block_hash for b in self._evictable), "evictable block lost its hash"
 
+
+@dataclass
+class AllocStatus:
+    OK = "ok"
+    LATER = "later"       # not enough blocks now, but the request could fit eventually
+    NEVER = "never"       # request can never fit; reject it
+
+
+class BlockManager:
+    """Maps sequences to physical blocks. The scheduler asks this before admitting work."""
+
+    def __init__(
+        self,
+        num_blocks: int,
+        block_size: int,
+        watermark: float = 0.01,
+        enable_prefix_caching: bool = False,
+    ):
+        self.block_size = block_size
+        self.allocator = BlockAllocator(num_blocks)
