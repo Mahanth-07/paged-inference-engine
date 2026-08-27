@@ -242,3 +242,24 @@ class BlockManager:
             return self.allocator.num_free_blocks > 0
         if seq.block_table and self.allocator.is_shared(seq.block_table[-1]):
             return self.allocator.num_free_blocks > 0
+        return True
+
+    def append_slot(self, seq: Sequence) -> Optional[tuple[int, int]]:
+        """Reserve room for one more token. Returns (src, dst) if a copy-on-write happened.
+
+        CoW case: the sequence's last block is shared (refcount > 1) and we are about to
+        write into it. Copy it first or we corrupt whoever else is reading it.
+        """
+        needed = self._blocks_for(seq.total_len + 1)
+        if needed > len(seq.block_table):
+            seq.block_table.append(self.allocator.allocate())
+            return None
+
+        if not seq.block_table:
+            return None
+        last = seq.block_table[-1]
+        if self.allocator.is_shared(last):
+            new_block = self.allocator.allocate()
+            seq.block_table[-1] = new_block
+            self.allocator.free(last)
+            return (last, new_block)
