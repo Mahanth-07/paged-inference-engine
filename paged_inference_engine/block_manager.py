@@ -263,3 +263,24 @@ class BlockManager:
             seq.block_table[-1] = new_block
             self.allocator.free(last)
             return (last, new_block)
+        return None
+
+    def fork(self, parent: Sequence, child: Sequence) -> None:
+        """Share the parent's blocks with the child; CoW handles divergence later."""
+        child.block_table = list(parent.block_table)
+        for block_id in child.block_table:
+            self.allocator.incref(block_id)
+
+    def free(self, seq: Sequence) -> None:
+        if not seq.block_table:
+            return
+        self.allocator.free_many(seq.block_table)
+        seq.block_table = []
+
+    # ---- slot mapping -----------------------------------------------------
+
+    def slot_mapping(self, seq: Sequence, start: int, end: int) -> list[int]:
+        """Flat cache indices for logical token positions [start, end).
+
+        Feed this to reshape_and_cache so the model writes each new K/V into the
+        right physical location. Off-by-one bugs here produce output that is
