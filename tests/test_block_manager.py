@@ -64,3 +64,24 @@ def test_no_leaks_under_random_churn():
     held = []
     for _ in range(5000):
         if held and (len(held) >= 64 or rng.random() < 0.5):
+            a.free(held.pop(rng.randrange(len(held))))
+        else:
+            try:
+                held.append(a.allocate())
+            except OutOfBlocksError:
+                pass
+        a.check_invariants()
+    a.free_many(held)
+    assert a.num_free_blocks == 64
+
+
+# ---- block manager --------------------------------------------------------
+
+
+@pytest.mark.parametrize("prompt_len,expected", [(1, 1), (15, 1), (16, 1), (17, 2), (160, 10), (161, 11)])
+def test_block_count_is_ceil(prompt_len, expected):
+    bm = BlockManager(num_blocks=64, block_size=BLOCK_SIZE)
+    seq = make_seq(prompt_len)
+    bm.allocate(seq)
+    assert len(seq.block_table) == expected
+
