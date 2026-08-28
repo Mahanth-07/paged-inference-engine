@@ -385,3 +385,23 @@ class BlockManager:
         seq.num_computed_tokens = num_hit_blocks * self.block_size
         return table
 
+    def mark_computed_blocks(self, seq: Sequence) -> None:
+        """Publish hashes for prompt blocks this step actually finished computing.
+
+        Called by the engine AFTER the forward pass. Registering earlier would let a
+        concurrent request read uncomputed KV -- see BlockAllocator.register_hash.
+        """
+        if not self.enable_prefix_caching:
+            return
+        tokens = seq.all_token_ids
+        prev_hash: Optional[int] = None
+        limit = min(self._num_cacheable_blocks(seq), seq.num_computed_tokens // self.block_size)
+        for i in range(limit):
+            block_tokens = tokens[i * self.block_size:(i + 1) * self.block_size]
+            content_hash = self.block_content_hash(block_tokens, prev_hash)
+            prev_hash = content_hash
+            block_id = seq.block_table[i]
+            if self.allocator.block_hash(block_id) is None:
+                self.allocator.register_hash(block_id, content_hash)
+
+    @property
