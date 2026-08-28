@@ -85,3 +85,24 @@ def test_block_count_is_ceil(prompt_len, expected):
     bm.allocate(seq)
     assert len(seq.block_table) == expected
 
+
+@pytest.mark.parametrize("total_len,expected", [(1, 1), (15, 15), (16, 16), (17, 1), (32, 16), (33, 1)])
+def test_last_page_len_is_never_zero(total_len, expected):
+    """FlashInfer requires kv_last_page_len in [1, page_size]. A 0 here is a
+    silent-wrong-answer bug, not a crash. Guard it with a test."""
+    seq = make_seq(total_len)
+    assert seq.last_block_occupancy(BLOCK_SIZE) == expected
+    assert 1 <= seq.last_block_occupancy(BLOCK_SIZE) <= BLOCK_SIZE
+
+
+def test_slot_mapping_is_contiguous_within_a_block():
+    bm = BlockManager(num_blocks=64, block_size=BLOCK_SIZE)
+    seq = make_seq(40)
+    bm.allocate(seq)
+    slots = bm.slot_mapping(seq, 0, 40)
+    assert len(slots) == 40
+    assert len(set(slots)) == 40, "slot mapping must be injective or you overwrite KV"
+    for i in range(40):
+        blk, off = seq.block_table[i // BLOCK_SIZE], i % BLOCK_SIZE
+        assert slots[i] == blk * BLOCK_SIZE + off
+
