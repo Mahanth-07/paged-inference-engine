@@ -43,3 +43,24 @@ def test_refcount_defers_free():
     assert a.ref_count(b) == 2 and a.is_shared(b)
     a.free(b)
     assert a.num_free_blocks == 3, "shared block must not return to the free list"
+    a.free(b)
+    assert a.num_free_blocks == 4
+    a.check_invariants()
+
+
+def test_double_free_raises():
+    a = BlockAllocator(2)
+    b = a.allocate()
+    a.free(b)
+    with pytest.raises(KeyError):
+        a.free(b)
+
+
+def test_no_leaks_under_random_churn():
+    import random
+
+    rng = random.Random(0)
+    a = BlockAllocator(64)
+    held = []
+    for _ in range(5000):
+        if held and (len(held) >= 64 or rng.random() < 0.5):
