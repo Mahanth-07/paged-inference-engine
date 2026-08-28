@@ -426,3 +426,20 @@ def compute_num_gpu_blocks(
     weight_bytes: int,
     activation_peak_bytes: int,
     num_layers: int,
+    num_kv_heads: int,
+    head_dim: int,
+    block_size: int,
+    dtype_bytes: int = 2,
+    utilization: float = 0.90,
+) -> int:
+    """How many blocks fit in VRAM.
+
+    bytes_per_block = 2 (K and V) * block_size * num_kv_heads * head_dim * dtype_bytes * num_layers
+
+    In the real engine you profile activation_peak_bytes by running one forward pass at
+    max_num_batched_tokens and reading torch.cuda.max_memory_allocated(). Hardcoding a
+    guess here is a classic source of "works at batch 8, OOMs at batch 64".
+    """
+    budget = int(total_memory_bytes * utilization) - weight_bytes - activation_peak_bytes
+    bytes_per_block = 2 * block_size * num_kv_heads * head_dim * dtype_bytes * num_layers
+    return max(0, budget // bytes_per_block)
