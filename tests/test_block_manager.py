@@ -127,3 +127,23 @@ def test_append_slot_allocates_only_on_block_boundary():
     assert bm.num_free_blocks == free_before - 1
 
 
+def test_every_written_token_has_a_slot():
+    """The invariant that ties the block manager to the kernel: after append_slot,
+    slot_for_token must be valid for the token about to be written."""
+    bm = BlockManager(num_blocks=64, block_size=BLOCK_SIZE)
+    seq = make_seq(30)
+    bm.allocate(seq)
+    for _ in range(40):
+        bm.append_slot(seq)
+        slot = seq.slot_for_token(seq.total_len, BLOCK_SIZE)  # must not IndexError
+        assert 0 <= slot < 64 * BLOCK_SIZE
+        seq.output_token_ids.append(0)
+
+
+def test_fork_shares_blocks_and_cow_on_append():
+    bm = BlockManager(num_blocks=64, block_size=BLOCK_SIZE)
+    parent = make_seq(BLOCK_SIZE * 2)
+    bm.allocate(parent)
+    child = make_seq(BLOCK_SIZE * 2)
+    bm.fork(parent, child)
+
