@@ -405,3 +405,24 @@ class BlockManager:
                 self.allocator.register_hash(block_id, content_hash)
 
     @property
+    def prefix_cache_hit_rate(self) -> float:
+        if not self.num_cache_query_blocks:
+            return 0.0
+        return self.num_cache_hit_blocks / self.num_cache_query_blocks
+
+    # ---- introspection ----------------------------------------------------
+
+    @property
+    def num_free_blocks(self) -> int:
+        return self.allocator.num_free_blocks
+
+    @property
+    def utilization(self) -> float:
+        return self.allocator.num_allocated_blocks / self.allocator.num_blocks
+
+
+def compute_num_gpu_blocks(
+    total_memory_bytes: int,
+    weight_bytes: int,
+    activation_peak_bytes: int,
+    num_layers: int,
