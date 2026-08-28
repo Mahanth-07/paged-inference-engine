@@ -23,3 +23,23 @@ def make_seq(prompt_len: int, output_len: int = 0) -> Sequence:
 
 
 # ---- allocator ------------------------------------------------------------
+
+
+def test_allocate_and_free_roundtrip():
+    a = BlockAllocator(8)
+    blocks = a.allocate_many(8)
+    assert a.num_free_blocks == 0
+    with pytest.raises(OutOfBlocksError):
+        a.allocate()
+    a.free_many(blocks)
+    assert a.num_free_blocks == 8
+    a.check_invariants()
+
+
+def test_refcount_defers_free():
+    a = BlockAllocator(4)
+    b = a.allocate()
+    a.incref(b)
+    assert a.ref_count(b) == 2 and a.is_shared(b)
+    a.free(b)
+    assert a.num_free_blocks == 3, "shared block must not return to the free list"
