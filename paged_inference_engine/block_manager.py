@@ -344,3 +344,23 @@ class BlockManager:
         never produce a first token. The `- 1` keeps at least one token of real work.
         """
         return max(0, (seq.prompt_len - 1) // self.block_size)
+
+    def _allocate_with_prefix_cache(self, seq: Sequence, need: int) -> list[int]:
+        """Reuse physical blocks whose content hash matches; incref instead of copy.
+
+        Sets seq.num_computed_tokens to the length of the reused prefix, which is what
+        actually buys the throughput -- those tokens are never prefilled again. It is
+        also a CORRECTNESS requirement, not just an optimisation: a reused block may be
+        shared with a live sequence, and recomputing into it would corrupt that reader.
+        """
+        tokens = seq.all_token_ids
+        table: list[int] = []
+        prev_hash: Optional[int] = None
+        cacheable = self._num_cacheable_blocks(seq)
+        matching = True   # the first miss breaks the chain; nothing after it can hit
+        num_hit_blocks = 0
+
+        for i in range(need):
+            if i >= cacheable:
+                table.append(self.allocator.allocate())
+                continue
