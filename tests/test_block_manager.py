@@ -106,3 +106,24 @@ def test_slot_mapping_is_contiguous_within_a_block():
         blk, off = seq.block_table[i // BLOCK_SIZE], i % BLOCK_SIZE
         assert slots[i] == blk * BLOCK_SIZE + off
 
+
+def test_append_slot_allocates_only_on_block_boundary():
+    """Call order is append_slot() THEN append_token() -- you reserve the cache slot
+    before the model writes K/V into it."""
+    bm = BlockManager(num_blocks=64, block_size=BLOCK_SIZE)
+    seq = make_seq(BLOCK_SIZE)  # exactly one full block
+    bm.allocate(seq)
+    assert len(seq.block_table) == 1
+    free_before = bm.num_free_blocks
+
+    bm.append_slot(seq)             # room for token 17 -> needs a 2nd block
+    seq.output_token_ids.append(0)
+    assert len(seq.block_table) == 2
+    assert bm.num_free_blocks == free_before - 1
+
+    bm.append_slot(seq)             # token 18 fits in the block we already have
+    seq.output_token_ids.append(0)
+    assert len(seq.block_table) == 2
+    assert bm.num_free_blocks == free_before - 1
+
+
