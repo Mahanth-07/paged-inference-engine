@@ -364,3 +364,24 @@ class BlockManager:
             if i >= cacheable:
                 table.append(self.allocator.allocate())
                 continue
+            block_tokens = tokens[i * self.block_size:(i + 1) * self.block_size]
+            content_hash = self.block_content_hash(block_tokens, prev_hash)
+            self.num_cache_query_blocks += 1
+            prev_hash = content_hash
+
+            hit = None
+            if matching:
+                candidate = self.allocator.lookup_hash(content_hash)
+                if candidate is not None and self.allocator.touch(candidate):
+                    hit = candidate
+            if hit is not None:
+                self.num_cache_hit_blocks += 1
+                num_hit_blocks += 1
+                table.append(hit)
+            else:
+                matching = False
+                table.append(self.allocator.allocate())
+
+        seq.num_computed_tokens = num_hit_blocks * self.block_size
+        return table
+
