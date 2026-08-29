@@ -167,3 +167,24 @@ def test_fork_shares_blocks_and_cow_on_append():
 
 def test_free_returns_everything():
     bm = BlockManager(num_blocks=32, block_size=BLOCK_SIZE)
+    seqs = [make_seq(50) for _ in range(4)]
+    for s in seqs:
+        bm.allocate(s)
+    for s in seqs:
+        bm.free(s)
+    assert bm.num_free_blocks == 32
+    bm.allocator.check_invariants()
+
+
+def test_paged_kv_metadata_matches_flashinfer_contract():
+    bm = BlockManager(num_blocks=64, block_size=BLOCK_SIZE)
+    seqs = [make_seq(n) for n in (5, 16, 33)]
+    for s in seqs:
+        bm.allocate(s)
+    md = bm.paged_kv_metadata(seqs)
+
+    assert md["kv_indptr"][0] == 0
+    assert len(md["kv_indptr"]) == len(seqs) + 1
+    assert md["kv_indptr"][-1] == len(md["kv_indices"])
+    assert len(md["kv_last_page_len"]) == len(seqs)
+    for i, seq in enumerate(seqs):
