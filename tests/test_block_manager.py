@@ -188,3 +188,16 @@ def test_paged_kv_metadata_matches_flashinfer_contract():
     assert md["kv_indptr"][-1] == len(md["kv_indices"])
     assert len(md["kv_last_page_len"]) == len(seqs)
     for i, seq in enumerate(seqs):
+        lo, hi = md["kv_indptr"][i], md["kv_indptr"][i + 1]
+        assert md["kv_indices"][lo:hi] == seq.block_table
+        # The layout's own length formula must reproduce the true length.
+        recovered = BLOCK_SIZE * (hi - lo - 1) + md["kv_last_page_len"][i]
+        assert recovered == seq.total_len
+
+
+def test_watermark_prevents_admitting_the_last_blocks():
+    from paged_inference_engine.block_manager import AllocStatus
+
+    bm = BlockManager(num_blocks=100, block_size=BLOCK_SIZE, watermark=0.10)
+    assert bm.can_allocate(make_seq(16 * 200)) == AllocStatus.NEVER
+    assert bm.can_allocate(make_seq(16 * 50)) == AllocStatus.OK
