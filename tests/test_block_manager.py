@@ -147,3 +147,23 @@ def test_fork_shares_blocks_and_cow_on_append():
     child = make_seq(BLOCK_SIZE * 2)
     bm.fork(parent, child)
 
+    assert child.block_table == parent.block_table
+    assert all(bm.allocator.is_shared(b) for b in child.block_table)
+
+    child.output_token_ids.append(0)
+    cow = bm.append_slot(child)
+    # Crossed a boundary, so a fresh block -- no copy needed.
+    assert cow is None and len(child.block_table) == 3
+
+    # Now make the last block shared and append within it.
+    other = make_seq(BLOCK_SIZE * 2 + 1)
+    bm.fork(child, other)
+    other.output_token_ids.append(0)
+    cow = bm.append_slot(other)
+    assert cow is not None, "writing into a shared partial block must copy-on-write"
+    src, dst = cow
+    assert src != dst
+
+
+def test_free_returns_everything():
+    bm = BlockManager(num_blocks=32, block_size=BLOCK_SIZE)
