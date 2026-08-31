@@ -26,3 +26,23 @@ class SamplingParams:
 
     @property
     def greedy(self) -> bool:
+        return self.temperature < 1e-5
+
+
+class Sampler:
+    """Stateful only in its RNG, so a step is reproducible given a seed.
+
+    Kept as a class (rather than a bare function) so the per-step parameter tensors
+    can be cached: at steady state the same sequences are decoding with the same
+    params step after step, and rebuilding three float tensors per step for 256 rows
+    is pure overhead.
+    """
+
+    def __init__(self, device: str = "cpu", seed: int = 0):
+        import torch
+
+        self.device = device
+        self.generator = torch.Generator(device=device)
+        self.generator.manual_seed(seed)
+        self._cache_key: Optional[tuple] = None
+        self._cache_tensors: Optional[tuple] = None
