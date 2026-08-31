@@ -107,3 +107,14 @@ class Sampler:
         probs = logits.softmax(dim=-1)
         sampled = torch.multinomial(probs, num_samples=1, generator=self.generator).squeeze(1)
         return torch.where(greedy, greedy_ids, sampled)
+
+
+def sample(logits, sampling_params_batch, generator=None):
+    """Functional entry point, mostly for tests. The engine holds a Sampler."""
+    import torch
+
+    sampler = Sampler(device=str(logits.device))
+    if generator is not None:
+        sampler.generator = generator
+    with torch.no_grad():
+        return sampler(logits, sampling_params_batch)
