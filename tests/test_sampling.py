@@ -29,3 +29,23 @@ def test_greedy_row_survives_a_mixed_batch():
     temperature divide -- that is a divide by zero and produces nan, not argmax."""
     logits = _logits(3)
     params = [SamplingParams(temperature=0.0), SamplingParams(temperature=1.0),
+              SamplingParams(temperature=0.0)]
+    out = sample(logits, params)
+    assert out[0] == logits[0].argmax()
+    assert out[2] == logits[2].argmax()
+
+
+def test_top_k_restricts_support():
+    """Only the k highest-logit tokens may ever be sampled."""
+    logits = _logits(1, vocab=16)
+    k = 3
+    allowed = set(logits[0].topk(k).indices.tolist())
+    sampler = Sampler(seed=0)
+    got = {int(sampler(logits, [SamplingParams(temperature=1.0, top_k=k)])[0])
+           for _ in range(300)}
+    assert got <= allowed
+    assert len(got) > 1, "top-k collapsed to a single token; the test proves nothing"
+
+
+def test_top_p_restricts_support_and_keeps_the_crossing_token():
+    """Nucleus sampling keeps the token that CROSSES p, not just the ones strictly
