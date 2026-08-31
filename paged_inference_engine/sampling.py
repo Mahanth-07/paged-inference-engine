@@ -86,3 +86,24 @@ class Sampler:
         logits = logits / safe_t.unsqueeze(1)
 
         # top-k: one batched topk at the largest k in the batch, then threshold per row
+        if any_top_k:
+            vocab = logits.shape[-1]
+            k = min(vocab, max(p.top_k for p in batch))
+            kth = logits.topk(k, dim=-1).values                       # (n, k) descending
+            row_k = torch.where(top_ks > 0, torch.clamp(top_ks, max=k), k) - 1
+            thresh = kth.gather(1, row_k.unsqueeze(1))
+            logits = logits.masked_fill(logits < thresh, float("-inf"))
+
+        # top-p: sort desc, cumulative probability, drop the tail beyond p
+        if any_top_p:
+            sorted_logits, sorted_idx = logits.sort(dim=-1, descending=True)
+            probs = sorted_logits.softmax(dim=-1)
+            cum = probs.cumsum(dim=-1)
+            # keep the token that crosses p; `cum - probs` is the mass strictly before it
+            drop = (cum - probs) > top_ps.unsqueeze(1)
+            sorted_logits = sorted_logits.masked_fill(drop, float("-inf"))
+            logits = torch.empty_like(sorted_logits).scatter_(1, sorted_idx, sorted_logits)
+
+        probs = logits.softmax(dim=-1)
+        sampled = torch.multinomial(probs, num_samples=1, generator=self.generator).squeeze(1)
+        return torch.where(greedy, greedy_ids, sampled)
