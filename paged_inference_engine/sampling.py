@@ -66,3 +66,23 @@ class Sampler:
 
     def __call__(self, logits, batch: _Seq[SamplingParams]):
         import torch
+
+        assert logits.shape[0] == len(batch), "logits rows must align with sampling params"
+        logits = logits.float()
+        greedy_ids = logits.argmax(dim=-1)
+
+        # These predicates come from the Python params, NOT from a tensor reduction.
+        # `bool(some_tensor.all())` is a device sync, and there would be three of them
+        # in this function, every step, for a decision the host already knows.
+        if all(p.greedy for p in batch):
+            return greedy_ids     # fast path: benchmarks are greedy; skip all masking
+        any_top_k = any(p.top_k > 0 for p in batch)
+        any_top_p = any(p.top_p < 1.0 for p in batch)
+
+        temps, top_ps, top_ks, greedy = self._params_tensors(batch)
+
+        # temperature (guard the greedy rows against a divide-by-zero)
+        safe_t = torch.where(greedy, torch.ones_like(temps), temps)
+        logits = logits / safe_t.unsqueeze(1)
+
+        # top-k: one batched topk at the largest k in the batch, then threshold per row
