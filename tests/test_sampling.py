@@ -49,3 +49,24 @@ def test_top_k_restricts_support():
 
 def test_top_p_restricts_support_and_keeps_the_crossing_token():
     """Nucleus sampling keeps the token that CROSSES p, not just the ones strictly
+    below it. Dropping it is an easy off-by-one that shrinks the nucleus by one."""
+    logits = torch.log(torch.tensor([[0.5, 0.3, 0.15, 0.05]]))
+    sampler = Sampler(seed=0)
+    got = {int(sampler(logits, [SamplingParams(temperature=1.0, top_p=0.7)])[0])
+           for _ in range(400)}
+    assert got == {0, 1}, got          # 0.5 then 0.8 crosses 0.7 -> both kept
+
+
+def test_temperature_widens_the_distribution():
+    logits = torch.tensor([[3.0, 1.0, 0.5, 0.0]])
+    # One sampler per set of draws: a fresh Sampler re-seeds its generator, so
+    # constructing one inside the loop would draw the same token 200 times.
+    s_cold, s_hot = Sampler(seed=1), Sampler(seed=1)
+    cold = {int(s_cold(logits, [SamplingParams(temperature=0.1)])[0]) for _ in range(200)}
+    hot = {int(s_hot(logits, [SamplingParams(temperature=5.0)])[0]) for _ in range(200)}
+    assert cold == {0}
+    assert len(hot) > 1
+
+
+def test_batched_rows_are_independent():
+    """Row i's parameters must not leak into row j. Build a batch where each row has a
