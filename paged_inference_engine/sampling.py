@@ -46,3 +46,23 @@ class Sampler:
         self.generator.manual_seed(seed)
         self._cache_key: Optional[tuple] = None
         self._cache_tensors: Optional[tuple] = None
+
+    def _params_tensors(self, batch: _Seq[SamplingParams]):
+        import torch
+
+        key = tuple((p.temperature, p.top_p, p.top_k) for p in batch)
+        if key == self._cache_key:
+            return self._cache_tensors
+        temps = torch.tensor([p.temperature for p in batch], dtype=torch.float32,
+                             device=self.device)
+        top_ps = torch.tensor([p.top_p for p in batch], dtype=torch.float32,
+                              device=self.device)
+        top_ks = torch.tensor([p.top_k for p in batch], dtype=torch.int64,
+                              device=self.device)
+        greedy = temps < 1e-5
+        tensors = (temps, top_ps, top_ks, greedy)
+        self._cache_key, self._cache_tensors = key, tensors
+        return tensors
+
+    def __call__(self, logits, batch: _Seq[SamplingParams]):
+        import torch
