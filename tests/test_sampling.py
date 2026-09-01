@@ -70,3 +70,23 @@ def test_temperature_widens_the_distribution():
 
 def test_batched_rows_are_independent():
     """Row i's parameters must not leak into row j. Build a batch where each row has a
+    disjoint allowed set and check nothing crosses over."""
+    vocab = 8
+    logits = torch.full((2, vocab), -1e4)
+    logits[0, :3] = torch.tensor([1.0, 0.9, 0.8])
+    logits[1, 5:] = torch.tensor([1.0, 0.9, 0.8])
+    params = [SamplingParams(temperature=1.0, top_k=2),
+              SamplingParams(temperature=1.0, top_k=2)]
+    sampler = Sampler(seed=0)
+    for _ in range(200):
+        out = sampler(logits, params)
+        assert int(out[0]) in (0, 1)
+        assert int(out[1]) in (5, 6)
+
+
+def test_param_tensor_cache_reuses_but_invalidates():
+    """The per-step parameter tensors are cached because at steady state the same rows
+    decode with the same params. The cache must invalidate when the batch changes."""
+    sampler = Sampler(seed=0)
+    a = [SamplingParams(temperature=0.7)] * 2
+    sampler(_logits(2), a)
