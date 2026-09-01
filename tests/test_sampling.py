@@ -90,3 +90,16 @@ def test_param_tensor_cache_reuses_but_invalidates():
     sampler = Sampler(seed=0)
     a = [SamplingParams(temperature=0.7)] * 2
     sampler(_logits(2), a)
+    first = sampler._cache_tensors
+    sampler(_logits(2), a)
+    assert sampler._cache_tensors is first, "cache did not hit on an identical batch"
+    sampler(_logits(2), [SamplingParams(temperature=0.7), SamplingParams(temperature=0.2)])
+    assert sampler._cache_tensors is not first, "cache did not invalidate"
+
+
+def test_seed_makes_sampling_reproducible():
+    logits = _logits(4, vocab=32)
+    params = [SamplingParams(temperature=1.0)] * 4
+    a = Sampler(seed=42)(logits, params)
+    b = Sampler(seed=42)(logits, params)
+    torch.testing.assert_close(a, b)
