@@ -26,3 +26,24 @@ class ScheduledSeq:
     seq: Sequence
     num_tokens: int
     """How many tokens of this sequence run in THIS step.
+    Decode: always 1. Prefill: the whole prompt, or a chunk of it under chunked prefill."""
+
+
+@dataclass
+class SchedulerOutput:
+    prefills: list[ScheduledSeq] = field(default_factory=list)
+    decodes: list[ScheduledSeq] = field(default_factory=list)
+    preempted: list[Sequence] = field(default_factory=list)
+    blocks_to_copy: list[tuple[int, int]] = field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.prefills and not self.decodes
+
+    @property
+    def num_batched_tokens(self) -> int:
+        return sum(s.num_tokens for s in self.prefills) + sum(s.num_tokens for s in self.decodes)
+
+    @property
+    def all_seqs(self) -> list[Sequence]:
+        return [s.seq for s in self.prefills] + [s.seq for s in self.decodes]
