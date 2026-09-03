@@ -47,3 +47,24 @@ class SchedulerOutput:
     @property
     def all_seqs(self) -> list[Sequence]:
         return [s.seq for s in self.prefills] + [s.seq for s in self.decodes]
+
+
+class Scheduler:
+    def __init__(self, config: SchedulerConfig, block_manager: BlockManager):
+        self.config = config
+        self.block_manager = block_manager
+        self.waiting: deque[Sequence] = deque()
+        self.running: list[Sequence] = []
+        self.ignored: list[Sequence] = []
+        """Requests rejected at admission. The engine drains this every step and emits
+        a finished output for each, so a caller gets an answer instead of hanging on a
+        request the scheduler quietly dropped."""
+
+        # Cumulative scheduling counters.
+        self.num_preemptions = 0
+        self.num_rejected = 0
+        self.num_steps = 0
+
+    # ---- queue management -------------------------------------------------
+
+    def add_seq(self, seq: Sequence) -> None:
