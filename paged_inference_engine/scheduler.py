@@ -172,3 +172,24 @@ class Scheduler:
                 self._reject(seq, "prompt exceeds max_num_batched_tokens and chunked "
                                   "prefill is disabled")
                 continue
+
+            status = self.block_manager.can_allocate(seq)
+            if status == AllocStatus.NEVER:
+                self.waiting.popleft()
+                self._reject(seq, "sequence can never fit in the KV cache")
+                continue
+            if status == AllocStatus.LATER:
+                break  # FCFS: do not skip ahead, that's how you get starvation
+
+            self.waiting.popleft()
+            # Allocate BEFORE sizing the chunk: with prefix caching, allocate() may
+            # hand back blocks that are already computed and advance
+            # seq.num_computed_tokens, which shrinks the prefill this step needs.
+            self.block_manager.allocate(seq)
+            chunk = self._prefill_chunk_size(seq, token_budget)
+            if chunk <= 0:
+                self.block_manager.free(seq)
+                seq.num_computed_tokens = 0
+                self.waiting.appendleft(seq)
+                break
+            if not self._reserve_output_slot(seq, chunk, out):
