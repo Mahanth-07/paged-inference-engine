@@ -130,3 +130,24 @@ class Scheduler:
             while not self.block_manager.can_append_slot(seq):
                 # Not enough memory. Evict someone -- the newest running sequence,
                 # or this one if it's the only candidate left.
+                if running_queue:
+                    victim = running_queue.pop()
+                else:
+                    victim = seq
+                self._preempt(victim, out)
+                if victim is seq:
+                    break
+            else:
+                cow = self.block_manager.append_slot(seq)
+                if cow is not None:
+                    out.blocks_to_copy.append(cow)
+                out.decodes.append(ScheduledSeq(seq, 1))
+                surviving.append(seq)
+                token_budget -= 1
+
+        self.running = surviving
+
+        # --- 2. resume partially-prefilled sequences before admitting new ones ---
+        for seq in self.running:
+            if seq.is_prefill and token_budget > 0:
+                chunk = self._prefill_chunk_size(seq, token_budget)
