@@ -151,3 +151,24 @@ class Scheduler:
         for seq in self.running:
             if seq.is_prefill and token_budget > 0:
                 chunk = self._prefill_chunk_size(seq, token_budget)
+                if chunk > 0 and self._reserve_output_slot(seq, chunk, out):
+                    out.prefills.append(ScheduledSeq(seq, chunk))
+                    token_budget -= chunk
+
+        # --- 3. admit new requests from the waiting queue ---
+        while self.waiting and token_budget > 0:
+            if len(self.running) >= self.config.max_num_seqs:
+                break
+            seq = self.waiting[0]
+
+            # Without chunked prefill, a prompt wider than the WHOLE token budget can
+            # never be scheduled, and under FCFS it blocks the queue behind it forever.
+            # (Reproduce the stall by removing this: `python -m bench.scheduler_sim
+            # --max-num-batched-tokens 1024 --no-chunked-prefill`.) Real engines reject
+            # at admission; a clear error beats a silent hang.
+            if (not self.config.enable_chunked_prefill
+                    and seq.num_uncomputed_tokens > self.config.max_num_batched_tokens):
+                self.waiting.popleft()
+                self._reject(seq, "prompt exceeds max_num_batched_tokens and chunked "
+                                  "prefill is disabled")
+                continue
