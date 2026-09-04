@@ -68,3 +68,24 @@ class Scheduler:
     # ---- queue management -------------------------------------------------
 
     def add_seq(self, seq: Sequence) -> None:
+        seq.status = SequenceStatus.WAITING
+        self.waiting.append(seq)
+
+    def abort(self, seq_id: int) -> None:
+        for seq in list(self.waiting):
+            if seq.seq_id == seq_id:
+                self.waiting.remove(seq)
+                seq.status = SequenceStatus.FINISHED_ABORTED
+                return
+        for seq in list(self.running):
+            if seq.seq_id == seq_id:
+                self.running.remove(seq)
+                self.block_manager.free(seq)
+                seq.status = SequenceStatus.FINISHED_ABORTED
+                return
+
+    @property
+    def has_unfinished(self) -> bool:
+        return bool(self.waiting or self.running or self.ignored)
+
+    def pop_ignored(self) -> list[Sequence]:
