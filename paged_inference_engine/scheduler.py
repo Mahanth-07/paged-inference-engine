@@ -89,3 +89,24 @@ class Scheduler:
         return bool(self.waiting or self.running or self.ignored)
 
     def pop_ignored(self) -> list[Sequence]:
+        out, self.ignored = self.ignored, []
+        return out
+
+    def _reject(self, seq: Sequence, reason: str) -> None:
+        seq.status = SequenceStatus.FINISHED_IGNORED
+        seq.finish_reason_detail = reason
+        self.ignored.append(seq)
+        self.num_rejected += 1
+
+    # ---- the main event ---------------------------------------------------
+
+    def schedule(self) -> SchedulerOutput:
+        """Decide what runs this step.
+
+        Order matters and is a real policy choice:
+          1. Decodes first. Already-running sequences have already paid TTFT; starving
+             them spikes ITL, which users feel more than a slightly worse TTFT.
+          2. Preempt from the TAIL of running (newest first) when the cache is full.
+             Preempting the oldest would waste the most work.
+          3. Fill the leftover token budget with prefills.
+
