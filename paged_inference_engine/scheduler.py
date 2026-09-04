@@ -110,3 +110,23 @@ class Scheduler:
              Preempting the oldest would waste the most work.
           3. Fill the leftover token budget with prefills.
 
+        Decode priority trades some prefill latency for steadier inter-token latency.
+        """
+        out = SchedulerOutput()
+        self.num_steps += 1
+        token_budget = self.config.max_num_batched_tokens
+
+        # --- 1. decodes, with preemption on memory pressure ---
+        running_queue = deque(self.running)
+        surviving: list[Sequence] = []
+
+        while running_queue:
+            seq = running_queue.popleft()
+            if seq.is_prefill:
+                # Partially-prefilled sequence from a previous chunked-prefill step.
+                surviving.append(seq)
+                continue
+
+            while not self.block_manager.can_append_slot(seq):
+                # Not enough memory. Evict someone -- the newest running sequence,
+                # or this one if it's the only candidate left.
