@@ -254,3 +254,20 @@ class Scheduler:
         finished = []
         still_running = []
         for seq in self.running:
+            if seq.status.is_finished or seq.check_finished(eos_token_id):
+                self.block_manager.free(seq)
+                finished.append(seq)
+            else:
+                still_running.append(seq)
+        self.running = still_running
+        return finished
+
+    def stats(self) -> dict:
+        return {
+            "num_waiting": len(self.waiting),
+            "num_running": len(self.running),
+            "kv_cache_utilization": self.block_manager.utilization,
+            "num_preemptions": self.num_preemptions,
+            "num_rejected": self.num_rejected,
+            "num_steps": self.num_steps,
+        }
