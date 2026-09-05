@@ -193,3 +193,23 @@ class Scheduler:
                 self.waiting.appendleft(seq)
                 break
             if not self._reserve_output_slot(seq, chunk, out):
+                # Shouldn't happen -- can_allocate budgets for the +1 -- but if the
+                # watermark is misconfigured, roll back rather than corrupt the cache.
+                self.block_manager.free(seq)
+                seq.num_computed_tokens = 0
+                self.waiting.appendleft(seq)
+                break
+            seq.status = SequenceStatus.RUNNING
+            self.running.append(seq)
+            out.prefills.append(ScheduledSeq(seq, chunk))
+            token_budget -= chunk
+
+        return out
+
+    def _reserve_output_slot(self, seq: Sequence, chunk: int, out: SchedulerOutput) -> bool:
+        """A prefill chunk that COMPLETES the sequence's uncomputed tokens also emits a
+        token this step, so it needs cache room for that token. A partial chunk doesn't.
+
+        Forgetting this is a fun bug: it only fires when a prompt length lands exactly on
+        a block boundary and the cache is nearly full.
+        """
