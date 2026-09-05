@@ -213,3 +213,24 @@ class Scheduler:
         Forgetting this is a fun bug: it only fires when a prompt length lands exactly on
         a block boundary and the cache is nearly full.
         """
+        if seq.num_computed_tokens + chunk < seq.total_len:
+            return True
+        if not self.block_manager.can_append_slot(seq):
+            return False
+        cow = self.block_manager.append_slot(seq)
+        if cow is not None:
+            out.blocks_to_copy.append(cow)
+        return True
+
+    def _prefill_chunk_size(self, seq: Sequence, token_budget: int) -> int:
+        """How many prompt tokens to compute this step.
+
+        Note the failure mode without chunked prefill: a prompt longer than
+        max_num_batched_tokens can NEVER be scheduled and blocks the FCFS queue forever.
+        Real engines reject such requests at admission. Reproduce it yourself with
+        `python -m bench.scheduler_sim --max-num-batched-tokens 1024 --no-chunked-prefill`
+        and watch throughput collapse -- it's a good thing to have seen.
+        """
+        # total_len, not prompt_len: a preempted sequence must recompute its generated
+        # tokens as well as its prompt.
+        remaining = seq.num_uncomputed_tokens
