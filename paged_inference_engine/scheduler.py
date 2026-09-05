@@ -234,3 +234,23 @@ class Scheduler:
         # total_len, not prompt_len: a preempted sequence must recompute its generated
         # tokens as well as its prompt.
         remaining = seq.num_uncomputed_tokens
+        if self.config.enable_chunked_prefill:
+            return min(remaining, token_budget)
+        # Without chunking, a prompt either runs whole or waits.
+        return remaining if remaining <= token_budget else 0
+
+    def _preempt(self, seq: Sequence, out: SchedulerOutput) -> None:
+        if seq in self.running:
+            self.running.remove(seq)
+        self.block_manager.free(seq)
+        seq.reset_for_recompute()
+        self.waiting.appendleft(seq)  # front of the queue: it already waited once
+        out.preempted.append(seq)
+        self.num_preemptions += 1
+
+    # ---- post-step bookkeeping -------------------------------------------
+
+    def free_finished(self, eos_token_id: int | None = None) -> list[Sequence]:
+        finished = []
+        still_running = []
+        for seq in self.running:
