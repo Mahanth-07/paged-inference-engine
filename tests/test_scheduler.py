@@ -42,3 +42,23 @@ def run_step(sched, bm):
 
 def test_respects_token_budget():
     sched, bm = make_scheduler(max_num_batched_tokens=100, enable_chunked_prefill=True)
+    for _ in range(10):
+        sched.add_seq(make_seq(64))
+    out = sched.schedule()
+    assert out.num_batched_tokens <= 100
+
+
+def test_respects_max_num_seqs():
+    sched, bm = make_scheduler(max_num_seqs=4, max_num_batched_tokens=100_000)
+    for _ in range(20):
+        sched.add_seq(make_seq(16))
+    sched.schedule()
+    assert len(sched.running) <= 4
+
+
+def test_never_overallocates_blocks():
+    sched, bm = make_scheduler(num_blocks=32, max_num_batched_tokens=100_000)
+    for _ in range(50):
+        sched.add_seq(make_seq(64, max_tokens=32))
+    for _ in range(300):
+        run_step(sched, bm)
