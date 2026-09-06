@@ -62,3 +62,23 @@ def test_never_overallocates_blocks():
         sched.add_seq(make_seq(64, max_tokens=32))
     for _ in range(300):
         run_step(sched, bm)
+        bm.allocator.check_invariants()
+        assert bm.num_free_blocks >= 0
+
+
+def test_all_requests_eventually_finish():
+    """No starvation and no deadlock -- the two failure modes that will waste a whole
+    GPU session if you find them there instead of here."""
+    sched, bm = make_scheduler(num_blocks=64, max_num_batched_tokens=512, max_num_seqs=8)
+    seqs = [make_seq(pl, max_tokens=ml) for pl, ml in
+            [(10, 5), (200, 20), (33, 40), (17, 3), (300, 10), (8, 60), (128, 12)]]
+    for s in seqs:
+        sched.add_seq(s)
+
+    finished, steps = [], 0
+    while sched.has_unfinished and steps < 20_000:
+        steps += 1
+        _, done = run_step(sched, bm)
+        finished.extend(done)
+
+    assert len(finished) == len(seqs), f"only {len(finished)}/{len(seqs)} finished in {steps} steps"
