@@ -103,3 +103,23 @@ def test_finished_sequence_frees_its_slot_immediately():
     assert waiting in sched.running, "waiting request should take the freed slot at once"
 
 
+# ---- chunked prefill ------------------------------------------------------
+
+
+def test_chunked_prefill_splits_a_long_prompt():
+    sched, bm = make_scheduler(max_num_batched_tokens=64, enable_chunked_prefill=True)
+    seq = make_seq(256)
+    sched.add_seq(seq)
+    out = sched.schedule()
+    assert len(out.prefills) == 1
+    assert out.prefills[0].num_tokens == 64, "prompt should be chunked to the budget"
+    assert seq.is_prefill
+
+
+def test_without_chunked_prefill_an_oversized_prompt_waits():
+    sched, bm = make_scheduler(max_num_batched_tokens=64, enable_chunked_prefill=False)
+    sched.add_seq(make_seq(256))
+    out = sched.schedule()
+    assert out.is_empty
+
+
