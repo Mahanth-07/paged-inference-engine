@@ -82,3 +82,24 @@ def test_all_requests_eventually_finish():
         finished.extend(done)
 
     assert len(finished) == len(seqs), f"only {len(finished)}/{len(seqs)} finished in {steps} steps"
+    for s in seqs:
+        assert s.output_len == s.sampling_params.max_tokens
+
+
+def test_finished_sequence_frees_its_slot_immediately():
+    """This is the definition of continuous batching. If a finished sequence lingers
+    in `running`, you have static batching with extra steps."""
+    sched, bm = make_scheduler(max_num_seqs=2, max_num_batched_tokens=100_000)
+    short, long_ = make_seq(16, max_tokens=1), make_seq(16, max_tokens=50)
+    waiting = make_seq(16, max_tokens=5)
+    sched.add_seq(short)
+    sched.add_seq(long_)
+    sched.add_seq(waiting)
+
+    run_step(sched, bm)   # prefill both; short emits its only token
+    run_step(sched, bm)   # short is finished and evicted
+    assert short not in sched.running
+    run_step(sched, bm)
+    assert waiting in sched.running, "waiting request should take the freed slot at once"
+
+
