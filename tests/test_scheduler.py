@@ -163,3 +163,13 @@ def test_preempted_sequence_keeps_its_generated_tokens():
     from paged_inference_engine.sequence import SequenceStatus
 
     seq = make_seq(32, max_tokens=10)
+    seq.output_token_ids = [1, 2, 3]
+    seq.num_computed_tokens = 35
+    seq.block_table = [0, 1, 2]
+    seq.reset_for_recompute()
+
+    assert seq.output_token_ids == [1, 2, 3], "preemption must not lose generated output"
+    assert seq.num_computed_tokens == 0, "but all KV must be recomputed"
+    assert seq.block_table == []
+    assert seq.status is SequenceStatus.PREEMPTED
+    assert seq.num_preemptions == 1
