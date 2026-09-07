@@ -123,3 +123,23 @@ def test_without_chunked_prefill_an_oversized_prompt_waits():
     assert out.is_empty
 
 
+def test_chunked_prefill_does_not_stall_decodes():
+    """The whole point: a 4000-token prompt arriving must not block running decodes."""
+    sched, bm = make_scheduler(num_blocks=2048, max_num_batched_tokens=512,
+                               enable_chunked_prefill=True)
+    running = [make_seq(16, max_tokens=100) for _ in range(4)]
+    for s in running:
+        sched.add_seq(s)
+    run_step(sched, bm)
+
+    sched.add_seq(make_seq(4000, max_tokens=5))
+    for _ in range(5):
+        out, _ = run_step(sched, bm)
+        assert len(out.decodes) == 4, "decodes must keep running alongside the chunked prefill"
+
+
+# ---- preemption -----------------------------------------------------------
+
+
+def test_preemption_under_memory_pressure_is_recoverable():
+    sched, bm = make_scheduler(num_blocks=24, max_num_batched_tokens=100_000, max_num_seqs=8)
