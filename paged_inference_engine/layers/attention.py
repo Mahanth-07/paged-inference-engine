@@ -91,3 +91,24 @@ class PagedAttention(nn.Module):
         backend: str = "naive",
         layer_idx: int = 0,
     ):
+        super().__init__()
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
+        self.head_dim = head_dim
+        self.scale = scale if scale is not None else head_dim ** -0.5
+        self.backend = backend
+        self.layer_idx = layer_idx
+        assert num_heads % num_kv_heads == 0, "num_heads must be a multiple of num_kv_heads"
+        self.gqa_ratio = num_heads // num_kv_heads
+
+    def forward(self, query, key, value, kv_cache, model_input):
+        """
+        1. Write this step's K/V into the paged cache -- always, every token.
+        2. Prefill tokens: causal attention over [0, context_len), where the queries
+           align to the END of the context (chunked prefill means a chunk's queries
+           sit at absolute positions ctx-q_len .. ctx-1, not 0 .. q_len-1).
+        3. Decode tokens: paged decode attention, query length 1.
+        """
+        mi = model_input
+        if kv_cache is not None:
+            k_cache, v_cache = kv_cache[0], kv_cache[1]
