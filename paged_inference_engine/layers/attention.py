@@ -30,3 +30,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# ---------------------------------------------------------------------------
+# cache writes
+# ---------------------------------------------------------------------------
+
+
+def reshape_and_cache_torch(key, value, k_cache, v_cache, slot_mapping) -> None:
+    """Scatter newly computed K/V into the paged cache (torch reference).
+
+    slot_mapping[i] = block_table[pos // block_size] * block_size + pos % block_size,
+    computed on the CPU by BlockManager.slot_mapping. Every token in the batch --
+    prefill and decode alike -- gets written, every layer, every step.
+    """
+    num_kv_heads, head_dim = key.shape[-2], key.shape[-1]
+    # Index-assignment rather than index_copy_: MPS has no aten::index_copy, and this
+    # is the CPU/MPS path (CUDA goes through the fused Triton kernel). Slots are unique
+    # by construction -- one token, one position, one slot -- so the duplicate-index
+    # nondeterminism of index_put_ cannot arise.
+    k_cache.view(-1, num_kv_heads, head_dim)[slot_mapping] = key
+    v_cache.view(-1, num_kv_heads, head_dim)[slot_mapping] = value
+
