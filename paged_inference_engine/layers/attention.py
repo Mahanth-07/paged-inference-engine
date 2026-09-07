@@ -71,3 +71,23 @@ def copy_blocks(kv_caches: list[torch.Tensor], blocks_to_copy: list[tuple[int, i
     device = kv_caches[0].device
     src = torch.tensor([s for s, _ in blocks_to_copy], dtype=torch.long, device=device)
     dst = torch.tensor([d for _, d in blocks_to_copy], dtype=torch.long, device=device)
+    for cache in kv_caches:
+        # cache: (2, num_blocks, block_size, num_kv_heads, head_dim)
+        cache[:, dst] = cache[:, src]
+
+
+# ---------------------------------------------------------------------------
+# the layer
+# ---------------------------------------------------------------------------
+
+
+class PagedAttention(nn.Module):
+    def __init__(
+        self,
+        num_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        scale: Optional[float] = None,
+        backend: str = "naive",
+        layer_idx: int = 0,
+    ):
