@@ -50,3 +50,24 @@ def reshape_and_cache_torch(key, value, k_cache, v_cache, slot_mapping) -> None:
     k_cache.view(-1, num_kv_heads, head_dim)[slot_mapping] = key
     v_cache.view(-1, num_kv_heads, head_dim)[slot_mapping] = value
 
+
+def reshape_and_cache(key, value, k_cache, v_cache, slot_mapping) -> None:
+    from ..kernels.cache_ops import reshape_and_cache_triton, use_triton_cache_op
+
+    if use_triton_cache_op(key):
+        reshape_and_cache_triton(key, value, k_cache, v_cache, slot_mapping)
+    else:
+        reshape_and_cache_torch(key, value, k_cache, v_cache, slot_mapping)
+
+
+def copy_blocks(kv_caches: list[torch.Tensor], blocks_to_copy: list[tuple[int, int]]) -> None:
+    """Copy-on-write for shared blocks (prefix caching / forked sequences).
+
+    The scheduler tells us (src, dst) pairs; every layer's cache needs the same copy.
+    Batch them into one index_copy_ per layer rather than a loop of slice assignments.
+    """
+    if not blocks_to_copy or not kv_caches:
+        return
+    device = kv_caches[0].device
+    src = torch.tensor([s for s, _ in blocks_to_copy], dtype=torch.long, device=device)
+    dst = torch.tensor([d for _, d in blocks_to_copy], dtype=torch.long, device=device)
