@@ -143,3 +143,23 @@ def test_chunked_prefill_does_not_stall_decodes():
 
 def test_preemption_under_memory_pressure_is_recoverable():
     sched, bm = make_scheduler(num_blocks=24, max_num_batched_tokens=100_000, max_num_seqs=8)
+    seqs = [make_seq(48, max_tokens=40) for _ in range(6)]
+    for s in seqs:
+        sched.add_seq(s)
+
+    finished, steps = [], 0
+    while sched.has_unfinished and steps < 50_000:
+        steps += 1
+        _, done = run_step(sched, bm)
+        finished.extend(done)
+
+    assert len(finished) == len(seqs)
+    assert sched.num_preemptions > 0, "this config should be tight enough to force preemption"
+    bm.allocator.check_invariants()
+    assert bm.num_free_blocks == 24, "all blocks returned after everything finished"
+
+
+def test_preempted_sequence_keeps_its_generated_tokens():
+    from paged_inference_engine.sequence import SequenceStatus
+
+    seq = make_seq(32, max_tokens=10)
