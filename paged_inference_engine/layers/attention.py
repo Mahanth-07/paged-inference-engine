@@ -112,3 +112,24 @@ class PagedAttention(nn.Module):
         mi = model_input
         if kv_cache is not None:
             k_cache, v_cache = kv_cache[0], kv_cache[1]
+            reshape_and_cache(key, value, k_cache, v_cache, mi.slot_mapping)
+        else:  # no cache: single-shot causal attention (used by the M1 oracle path)
+            return self._forward_cacheless(query, key, value)
+
+        out = torch.empty_like(query)
+        npt = mi.num_prefill_tokens
+
+        if mi.num_prefills:
+            out[:npt] = self._prefill(query[:npt], k_cache, v_cache, mi)
+        if mi.num_decodes:
+            out[npt:] = self._decode(query[npt:], k_cache, v_cache, mi)
+        return out
+
+    # ---- dispatch ---------------------------------------------------------
+
+    def _prefill(self, query, k_cache, v_cache, mi):
+        if self.backend == "flashinfer" and mi.fi_prefill is not None:
+            return self._forward_flashinfer_prefill(query, k_cache, v_cache, mi)
+        if self.backend == "flash_attn":
+            return self._forward_flash_attn_prefill(query, k_cache, v_cache, mi)
+        if self.backend == "triton":
