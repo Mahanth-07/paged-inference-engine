@@ -236,3 +236,24 @@ class PagedAttention(nn.Module):
         return mi.fi_prefill.run(query, (k_cache, v_cache))
 
     def _forward_flashinfer_decode(self, query, k_cache, v_cache, mi):
+        return mi.fi_decode.run(query, (k_cache, v_cache))
+
+    # ---- backend 3: flash-attn -------------------------------------------
+
+    def _forward_flash_attn_prefill(self, query, k_cache, v_cache, mi):
+        from flash_attn import flash_attn_varlen_func
+
+        return flash_attn_varlen_func(
+            q=query,
+            k=k_cache,
+            v=v_cache,
+            cu_seqlens_q=mi.qo_indptr,
+            max_seqlen_q=mi.max_query_len,
+            cu_seqlens_k=mi.prefill_kv_cu_seqlens,
+            max_seqlen_k=mi.max_prefill_context_len,
+            softmax_scale=self.scale,
+            causal=True,            # FA>=2.1 aligns causal to the BOTTOM-RIGHT, which is
+                                    # exactly the chunked-prefill semantics we want
+            block_table=mi.prefill_block_tables,
+        )
+
