@@ -154,3 +154,24 @@ class PagedAttention(nn.Module):
             return self._forward_flash_attn_decode(query, k_cache, v_cache, mi)
         if self.backend == "triton":
             from ..kernels.paged_attention_triton import paged_attention_decode
+
+            return paged_attention_decode(
+                query, k_cache, v_cache,
+                mi.decode_block_tables, mi.decode_context_lens, self.scale,
+                split_k=mi.use_split_k,
+                # The runner already has this on the host. Letting the kernel read it
+                # off the device would be a sync per layer -- 16 of them per step.
+                max_context=mi.max_decode_context_len,
+            )
+        ones = torch.ones_like(mi.decode_context_lens)
+        return self._forward_naive(
+            query, k_cache, v_cache,
+            mi.decode_block_tables, mi.decode_context_lens, ones, None,
+        )
+
+    # ---- backend 1: naive gather (the oracle) -----------------------------
+
+    def _forward_naive(self, query, k_cache, v_cache, block_tables, context_lens,
+                       query_lens, qo_indptr=None):
+        """Gather each sequence's blocks back into a dense tensor and call SDPA.
+
