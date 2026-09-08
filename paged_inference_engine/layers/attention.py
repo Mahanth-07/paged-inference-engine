@@ -257,3 +257,16 @@ class PagedAttention(nn.Module):
             block_table=mi.prefill_block_tables,
         )
 
+    def _forward_flash_attn_decode(self, query, k_cache, v_cache, mi):
+        from flash_attn import flash_attn_with_kvcache
+
+        out = flash_attn_with_kvcache(
+            q=query.unsqueeze(1),                    # (num_seqs, 1, H, D)
+            k_cache=k_cache,
+            v_cache=v_cache,
+            cache_seqlens=mi.decode_context_lens,
+            block_table=mi.decode_block_tables,
+            softmax_scale=self.scale,
+            causal=True,
+        )
+        return out.squeeze(1)
