@@ -196,3 +196,23 @@ class PagedAttention(nn.Module):
                 v = v.repeat_interleave(self.gqa_ratio, dim=1)
 
             # Bottom-right aligned causal mask: query j sits at absolute position
+            # ctx - q_len + j. This is THE chunked-prefill correctness detail.
+            if q_len == 1:
+                mask = None
+            else:
+                pos = torch.arange(ctx - q_len, ctx, device=q.device).unsqueeze(1)
+                keys = torch.arange(ctx, device=q.device).unsqueeze(0)
+                mask = keys <= pos
+
+            o = F.scaled_dot_product_attention(
+                q.transpose(0, 1).unsqueeze(0),      # (1, H, q_len, D)
+                k.transpose(0, 1).unsqueeze(0),
+                v.transpose(0, 1).unsqueeze(0),
+                attn_mask=mask,
+                scale=self.scale,
+            )
+            outputs.append(o.squeeze(0).transpose(0, 1))           # (q_len, H, D)
+        return torch.cat(outputs, dim=0)
+
+    def _forward_cacheless(self, query, key, value):
+        """Plain causal attention with no cache at all. Used by the M1 reference model
