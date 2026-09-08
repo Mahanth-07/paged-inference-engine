@@ -133,3 +133,24 @@ class PagedAttention(nn.Module):
         if self.backend == "flash_attn":
             return self._forward_flash_attn_prefill(query, k_cache, v_cache, mi)
         if self.backend == "triton":
+            from ..kernels.paged_attention_triton import paged_attention_prefill
+
+            return paged_attention_prefill(
+                query, k_cache, v_cache,
+                mi.prefill_block_tables, mi.prefill_context_lens,
+                mi.prefill_query_lens, mi.qo_indptr, self.scale,
+                max_query_len=mi.max_query_len,
+            )
+        return self._forward_naive(
+            query, k_cache, v_cache,
+            mi.prefill_block_tables, mi.prefill_context_lens,
+            mi.prefill_query_lens, mi.qo_indptr,
+        )
+
+    def _decode(self, query, k_cache, v_cache, mi):
+        if self.backend == "flashinfer" and mi.fi_decode is not None:
+            return self._forward_flashinfer_decode(query, k_cache, v_cache, mi)
+        if self.backend == "flash_attn":
+            return self._forward_flash_attn_decode(query, k_cache, v_cache, mi)
+        if self.backend == "triton":
+            from ..kernels.paged_attention_triton import paged_attention_decode
