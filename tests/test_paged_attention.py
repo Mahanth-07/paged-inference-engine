@@ -47,3 +47,24 @@ def make_paged_fixture(context_lens, num_heads, num_kv_heads, head_dim, block_si
                           generator=g, dtype=torch.float32).to(dtype).to(device)
     v_cache = torch.randn(total_pages, block_size, num_kv_heads, head_dim,
                           generator=g, dtype=torch.float32).to(dtype).to(device)
+
+    tables, cursor = [], 0
+    for p in pages:
+        tables.append(perm[cursor:cursor + p].tolist())
+        cursor += p
+    max_pages = max(pages)
+    block_tables = torch.tensor([t + [0] * (max_pages - len(t)) for t in tables],
+                                dtype=torch.int32, device=device)
+    ctx = torch.tensor(context_lens, dtype=torch.int32, device=device)
+
+    qlens = query_lens or [1] * len(context_lens)
+    total_q = sum(qlens)
+    query = torch.randn(total_q, num_heads, head_dim,
+                        generator=g, dtype=torch.float32).to(dtype).to(device)
+    return query, k_cache, v_cache, block_tables, ctx, qlens
+
+
+def dense_reference(query, k_cache, v_cache, block_tables, context_lens, qlens, scale):
+    """Independent oracle: gather with plain Python indexing and do the math by hand.
+
+    Deliberately does NOT reuse reference_paged_attention_*: two implementations that
