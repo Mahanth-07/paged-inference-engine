@@ -175,3 +175,24 @@ class PagedAttention(nn.Module):
                        query_lens, qo_indptr=None):
         """Gather each sequence's blocks back into a dense tensor and call SDPA.
 
+        Materialises the whole context per sequence, so it is slow and memory hungry.
+        That is fine: it differs from the fast kernels in exactly one way (it does not
+        touch the block table during the math), which is what makes it a useful oracle.
+        """
+        block_size = k_cache.shape[1]
+        outputs = []
+        offset = 0
+        ctx_list = context_lens.tolist()
+        qlen_list = query_lens.tolist()
+        for i, (ctx, q_len) in enumerate(zip(ctx_list, qlen_list)):
+            q = query[offset:offset + q_len]                       # (q_len, H, D)
+            offset += q_len
+            num_blocks = (ctx + block_size - 1) // block_size
+            blocks = block_tables[i, :num_blocks]
+            k = k_cache[blocks].reshape(-1, self.num_kv_heads, self.head_dim)[:ctx]
+            v = v_cache[blocks].reshape(-1, self.num_kv_heads, self.head_dim)[:ctx]
+            if self.gqa_ratio > 1:
+                k = k.repeat_interleave(self.gqa_ratio, dim=1)
+                v = v.repeat_interleave(self.gqa_ratio, dim=1)
+
+            # Bottom-right aligned causal mask: query j sits at absolute position
