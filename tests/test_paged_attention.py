@@ -27,3 +27,23 @@ CUDA = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
 
 # ---------------------------------------------------------------------------
 # fixtures
+# ---------------------------------------------------------------------------
+
+
+def make_paged_fixture(context_lens, num_heads, num_kv_heads, head_dim, block_size,
+                       dtype=torch.float32, device="cpu", seed=0, query_lens=None):
+    """Build a paged cache whose blocks are SHUFFLED and NON-CONTIGUOUS.
+
+    If the fixture used contiguous block ids, every one of these tests would pass with
+    a completely broken block-table lookup. Shuffling is what makes them mean something.
+    Returns the paged cache plus a dense per-sequence view for independent checking.
+    """
+    g = torch.Generator().manual_seed(seed)
+    pages = [(c + block_size - 1) // block_size for c in context_lens]
+    total_pages = sum(pages) + 5
+    perm = torch.randperm(total_pages, generator=g)
+
+    k_cache = torch.randn(total_pages, block_size, num_kv_heads, head_dim,
+                          generator=g, dtype=torch.float32).to(dtype).to(device)
+    v_cache = torch.randn(total_pages, block_size, num_kv_heads, head_dim,
+                          generator=g, dtype=torch.float32).to(dtype).to(device)
