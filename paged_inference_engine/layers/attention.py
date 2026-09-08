@@ -216,3 +216,23 @@ class PagedAttention(nn.Module):
 
     def _forward_cacheless(self, query, key, value):
         """Plain causal attention with no cache at all. Used by the M1 reference model
+        so that path shares zero code with the paging machinery."""
+        k = key.repeat_interleave(self.gqa_ratio, dim=1) if self.gqa_ratio > 1 else key
+        v = value.repeat_interleave(self.gqa_ratio, dim=1) if self.gqa_ratio > 1 else value
+        o = F.scaled_dot_product_attention(
+            query.transpose(0, 1).unsqueeze(0),
+            k.transpose(0, 1).unsqueeze(0),
+            v.transpose(0, 1).unsqueeze(0),
+            is_causal=True,
+            scale=self.scale,
+        )
+        return o.squeeze(0).transpose(0, 1).contiguous()
+
+    # ---- backend 2: FlashInfer -------------------------------------------
+
+    def _forward_flashinfer_prefill(self, query, k_cache, v_cache, mi):
+        # The wrapper was planned ONCE for this step by AttentionState.plan(); calling
+        # plan() per layer would dominate the step time.
+        return mi.fi_prefill.run(query, (k_cache, v_cache))
+
+    def _forward_flashinfer_decode(self, query, k_cache, v_cache, mi):
