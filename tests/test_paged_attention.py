@@ -108,3 +108,24 @@ def dense_reference(query, k_cache, v_cache, block_tables, context_lens, qlens, 
 @pytest.mark.parametrize("block_size", [8, 16, 32])
 @pytest.mark.parametrize("num_heads,num_kv_heads", [(8, 8), (8, 2), (4, 1)])
 @pytest.mark.parametrize("context_lens", [
+    [1],                       # single token
+    [16],                      # exactly one full block
+    [17],                      # one token into a second block  <-- the classic bug
+    [15, 16, 17, 100, 129],    # ragged batch spanning boundaries
+    [257],                     # long-ish, exercises the block loop
+])
+def test_reference_decode_matches_dense(block_size, num_heads, num_kv_heads, context_lens):
+    q, kc, vc, bt, ctx, qlens = make_paged_fixture(
+        context_lens, num_heads, num_kv_heads, 32, block_size)
+    scale = 32 ** -0.5
+    got = reference_paged_attention_decode(q, kc, vc, bt, ctx, scale)
+    want = dense_reference(q, kc, vc, bt, ctx, qlens, scale)
+    torch.testing.assert_close(got, want, atol=1e-4, rtol=1e-4)
+
+
+@pytest.mark.parametrize("block_size", [16, 32])
+@pytest.mark.parametrize("num_heads,num_kv_heads", [(8, 2), (4, 4)])
+@pytest.mark.parametrize("context_lens,query_lens", [
+    ([10], [10]),              # fresh prefill: chunk starts at position 0
+    ([37], [5]),               # chunked prefill: queries sit at positions 32..36
+    ([64], [64]),              # exact block multiple
