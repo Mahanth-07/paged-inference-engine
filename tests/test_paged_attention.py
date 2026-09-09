@@ -68,3 +68,23 @@ def dense_reference(query, k_cache, v_cache, block_tables, context_lens, qlens, 
     """Independent oracle: gather with plain Python indexing and do the math by hand.
 
     Deliberately does NOT reuse reference_paged_attention_*: two implementations that
+    share a helper share its bugs.
+    """
+    block_size = k_cache.shape[1]
+    num_heads, head_dim = query.shape[1], query.shape[2]
+    num_kv_heads = k_cache.shape[2]
+    ratio = num_heads // num_kv_heads
+    outs = []
+    offset = 0
+    for i, q_len in enumerate(qlens):
+        ctx = int(context_lens[i])
+        q = query[offset:offset + q_len].float()
+        offset += q_len
+        ks, vs = [], []
+        for pos in range(ctx):
+            blk = int(block_tables[i, pos // block_size])
+            ks.append(k_cache[blk, pos % block_size].float())
+            vs.append(v_cache[blk, pos % block_size].float())
+        k = torch.stack(ks)                       # (ctx, kv_heads, dim)
+        v = torch.stack(vs)
+        out = torch.empty(q_len, num_heads, head_dim, dtype=torch.float32)
