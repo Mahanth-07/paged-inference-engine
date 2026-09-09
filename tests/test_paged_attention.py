@@ -88,3 +88,23 @@ def dense_reference(query, k_cache, v_cache, block_tables, context_lens, qlens, 
         k = torch.stack(ks)                       # (ctx, kv_heads, dim)
         v = torch.stack(vs)
         out = torch.empty(q_len, num_heads, head_dim, dtype=torch.float32)
+        for h in range(num_heads):
+            kh = k[:, h // ratio]                  # (ctx, dim)
+            vh = v[:, h // ratio]
+            logits = (q[:, h] @ kh.T) * scale      # (q_len, ctx)
+            for j in range(q_len):
+                allowed = ctx - q_len + j + 1      # bottom-right causal
+                row = logits[j, :allowed].softmax(-1)
+                out[j, h] = row @ vh[:allowed]
+        outs.append(out)
+    return torch.cat(outs).to(query.dtype)
+
+
+# ---------------------------------------------------------------------------
+# reference correctness -- runs on the MacBook
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("block_size", [8, 16, 32])
+@pytest.mark.parametrize("num_heads,num_kv_heads", [(8, 8), (8, 2), (4, 1)])
+@pytest.mark.parametrize("context_lens", [
