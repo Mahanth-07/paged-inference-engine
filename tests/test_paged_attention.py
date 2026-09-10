@@ -129,3 +129,24 @@ def test_reference_decode_matches_dense(block_size, num_heads, num_kv_heads, con
     ([10], [10]),              # fresh prefill: chunk starts at position 0
     ([37], [5]),               # chunked prefill: queries sit at positions 32..36
     ([64], [64]),              # exact block multiple
+    ([33, 65, 17], [33, 8, 1]),  # ragged mix of fresh and continued chunks
+])
+def test_reference_prefill_matches_dense(block_size, num_heads, num_kv_heads,
+                                         context_lens, query_lens):
+    """The chunked cases are the ones that matter: query j of a chunk attends to keys
+    0..(ctx - q_len + j), not 0..j. Top-left causal masking passes the first case and
+    fails every other one."""
+    q, kc, vc, bt, ctx, _ = make_paged_fixture(
+        context_lens, num_heads, num_kv_heads, 32, block_size, query_lens=query_lens)
+    scale = 32 ** -0.5
+    ql = torch.tensor(query_lens, dtype=torch.int32)
+    got = reference_paged_attention_prefill(q, kc, vc, bt, ctx, ql, scale)
+    want = dense_reference(q, kc, vc, bt, ctx, query_lens, scale)
+    torch.testing.assert_close(got, want, atol=1e-4, rtol=1e-4)
+
+
+def test_naive_backend_matches_reference():
+    """PagedAttention's `naive` backend is the engine's oracle, so it gets its own test
+    rather than being trusted because it looks obviously right."""
+    ctx_lens, q_lens = [33, 65, 17], [33, 8, 1]
+    q, kc, vc, bt, ctx, _ = make_paged_fixture(ctx_lens, 8, 2, 32, 16, query_lens=q_lens)
