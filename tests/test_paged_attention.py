@@ -170,3 +170,24 @@ def test_gqa_head_mapping():
     v_cache = torch.zeros(4, block_size, num_kv_heads, head_dim)
     for g in range(num_kv_heads):
         v_cache[:, :, g, :] = float(g)
+    query = torch.randn(1, num_heads, head_dim)
+    bt = torch.tensor([[2, 0, 3, 1]], dtype=torch.int32)
+    ctx = torch.tensor([16], dtype=torch.int32)
+
+    out = reference_paged_attention_decode(query, k_cache, v_cache, bt, ctx, 1.0)
+    for h in range(num_heads):
+        expected = float(h // ratio)
+        assert torch.allclose(out[0, h], torch.full((head_dim,), expected), atol=1e-5), (
+            f"query head {h} read kv head {out[0, h, 0].item():.0f}, expected {expected:.0f}"
+        )
+
+
+def test_partial_last_block_is_masked():
+    """A context length that is not a multiple of block_size leaves garbage in the tail
+    of the last page. If it is not masked, the output changes when that garbage does --
+    which is exactly what this test forces."""
+    q, kc, vc, bt, ctx, _ = make_paged_fixture([17], 4, 4, 32, 16)
+    scale = 32 ** -0.5
+    before = reference_paged_attention_decode(q, kc, vc, bt, ctx, scale).clone()
+    last_block = int(bt[0, 1])
+    kc[last_block, 1:] = 1e3          # poison positions 17.. of the last page
