@@ -191,3 +191,24 @@ def test_partial_last_block_is_masked():
     before = reference_paged_attention_decode(q, kc, vc, bt, ctx, scale).clone()
     last_block = int(bt[0, 1])
     kc[last_block, 1:] = 1e3          # poison positions 17.. of the last page
+    vc[last_block, 1:] = 1e3
+    after = reference_paged_attention_decode(q, kc, vc, bt, ctx, scale)
+    torch.testing.assert_close(before, after, atol=1e-5, rtol=1e-5)
+
+
+def test_reshape_and_cache_writes_to_the_right_slots():
+    """Non-monotonic slots on purpose: that is what a real ragged batch produces, and a
+    scatter that quietly assumes sorted indices will pass a monotonic test."""
+    num_kv_heads, head_dim, block_size, num_blocks = 2, 4, 8, 6
+    kc = torch.zeros(num_blocks, block_size, num_kv_heads, head_dim)
+    vc = torch.zeros_like(kc)
+    slots = torch.tensor([37, 2, 19, 8, 40, 3], dtype=torch.int64)
+    key = torch.arange(len(slots) * num_kv_heads * head_dim, dtype=torch.float32) \
+        .view(len(slots), num_kv_heads, head_dim)
+    value = key * -1
+
+    reshape_and_cache_torch(key, value, kc, vc, slots)
+    for i, slot in enumerate(slots.tolist()):
+        b, off = slot // block_size, slot % block_size
+        torch.testing.assert_close(kc[b, off], key[i])
+        torch.testing.assert_close(vc[b, off], value[i])
