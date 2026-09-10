@@ -150,3 +150,23 @@ def test_naive_backend_matches_reference():
     rather than being trusted because it looks obviously right."""
     ctx_lens, q_lens = [33, 65, 17], [33, 8, 1]
     q, kc, vc, bt, ctx, _ = make_paged_fixture(ctx_lens, 8, 2, 32, 16, query_lens=q_lens)
+    attn = PagedAttention(8, 2, 32, backend="naive")
+    qo = torch.tensor([0, 33, 41, 42], dtype=torch.int32)
+    got = attn._forward_naive(q, kc, vc, bt, ctx,
+                              torch.tensor(q_lens, dtype=torch.int32), qo)
+    want = dense_reference(q, kc, vc, bt, ctx, q_lens, 32 ** -0.5)
+    torch.testing.assert_close(got, want, atol=1e-4, rtol=1e-4)
+
+
+def test_gqa_head_mapping():
+    """Query head h must attend to kv head h // (num_heads // num_kv_heads).
+
+    Constructed so the answer is unmistakable: kv head g is filled with the constant g,
+    so the attention output for query head h IS the index of the kv head it read.
+    """
+    num_heads, num_kv_heads, head_dim, block_size = 8, 2, 4, 16
+    ratio = num_heads // num_kv_heads
+    k_cache = torch.zeros(4, block_size, num_kv_heads, head_dim)
+    v_cache = torch.zeros(4, block_size, num_kv_heads, head_dim)
+    for g in range(num_kv_heads):
+        v_cache[:, :, g, :] = float(g)
