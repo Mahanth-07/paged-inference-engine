@@ -232,3 +232,23 @@ def test_slot_mapping_matches_block_table():
 # ---------------------------------------------------------------------------
 # Triton kernels -- GPU only
 # ---------------------------------------------------------------------------
+
+
+@CUDA
+@pytest.mark.parametrize("block_size", [16, 32])
+@pytest.mark.parametrize("num_heads,num_kv_heads", [(8, 8), (8, 2), (32, 8)])
+@pytest.mark.parametrize("context_lens", [
+    [1], [16], [17], [15, 16, 17, 100, 1023], [4096],
+])
+@pytest.mark.parametrize("split_k", [1, 4])
+def test_triton_decode_matches_reference(block_size, num_heads, num_kv_heads,
+                                         context_lens, split_k):
+    from paged_inference_engine.kernels.paged_attention_triton import paged_attention_decode
+
+    q, kc, vc, bt, ctx, _ = make_paged_fixture(
+        context_lens, num_heads, num_kv_heads, 64, block_size,
+        dtype=torch.float16, device="cuda")
+    scale = 64 ** -0.5
+    want = reference_paged_attention_decode(q, kc, vc, bt, ctx, scale)
+    got = paged_attention_decode(q, kc, vc, bt, ctx, scale, split_k=split_k)
+    torch.testing.assert_close(got, want, atol=2e-2, rtol=1e-2)
