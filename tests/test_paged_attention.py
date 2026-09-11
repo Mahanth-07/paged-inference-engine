@@ -212,3 +212,23 @@ def test_reshape_and_cache_writes_to_the_right_slots():
         b, off = slot // block_size, slot % block_size
         torch.testing.assert_close(kc[b, off], key[i])
         torch.testing.assert_close(vc[b, off], value[i])
+    assert kc.count_nonzero() == key.count_nonzero(), "wrote to slots it should not have"
+
+
+def test_slot_mapping_matches_block_table():
+    """The one line that is the whole idea of paging, checked against the block table."""
+    from paged_inference_engine.block_manager import BlockManager
+    from paged_inference_engine.sampling import SamplingParams
+    from paged_inference_engine.sequence import Sequence
+
+    bm = BlockManager(num_blocks=32, block_size=8)
+    seq = Sequence(prompt_token_ids=list(range(20)), sampling_params=SamplingParams())
+    bm.allocate(seq)
+    slots = bm.slot_mapping(seq, 0, 20)
+    for pos, slot in enumerate(slots):
+        assert slot == seq.block_table[pos // 8] * 8 + pos % 8
+
+
+# ---------------------------------------------------------------------------
+# Triton kernels -- GPU only
+# ---------------------------------------------------------------------------
