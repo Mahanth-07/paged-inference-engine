@@ -293,3 +293,24 @@ def test_fp32_accumulation_at_long_context():
         got = paged_attention_decode(q, kc, vc, bt, ctx, 64 ** -0.5, split_k=1)
         errors[ctx_len] = (got.float() - want).abs().max().item()
     assert errors[8192] < 5 * errors[1024] + 1e-3, (
+        f"error grows with context ({errors}) -- accumulating in fp16?")
+
+
+@CUDA
+def test_triton_reshape_and_cache_matches_torch():
+    from paged_inference_engine.kernels.cache_ops import reshape_and_cache_triton
+
+    kc = torch.zeros(16, 16, 4, 64, dtype=torch.float16, device="cuda")
+    vc = torch.zeros_like(kc)
+    kc2, vc2 = kc.clone(), vc.clone()
+    key = torch.randn(37, 4, 64, dtype=torch.float16, device="cuda")
+    value = torch.randn_like(key)
+    slots = torch.randperm(16 * 16, device="cuda")[:37].to(torch.int64)
+
+    reshape_and_cache_torch(key, value, kc, vc, slots)
+    reshape_and_cache_triton(key, value, kc2, vc2, slots)
+    torch.testing.assert_close(kc, kc2)
+    torch.testing.assert_close(vc, vc2)
+
+
+@CUDA
