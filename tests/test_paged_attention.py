@@ -273,3 +273,23 @@ def test_triton_prefill_matches_reference(block_size, num_heads, num_kv_heads,
     ql = torch.tensor(query_lens, dtype=torch.int32, device="cuda")
     qo = torch.tensor([0] + list(torch.tensor(query_lens).cumsum(0)),
                       dtype=torch.int32, device="cuda")
+    want = reference_paged_attention_prefill(q, kc, vc, bt, ctx, ql, scale)
+    got = paged_attention_prefill(q, kc, vc, bt, ctx, ql, qo, scale)
+    torch.testing.assert_close(got, want, atol=2e-2, rtol=1e-2)
+
+
+@CUDA
+def test_fp32_accumulation_at_long_context():
+    """fp16 accumulation drifts with context length. If the error GROWS from 1k to 8k
+    tokens, the accumulator dtype is wrong -- which is invisible at short context."""
+    from paged_inference_engine.kernels.paged_attention_triton import paged_attention_decode
+
+    errors = {}
+    for ctx_len in (1024, 8192):
+        q, kc, vc, bt, ctx, _ = make_paged_fixture(
+            [ctx_len], 8, 2, 64, 16, dtype=torch.float16, device="cuda")
+        want = reference_paged_attention_decode(
+            q.float(), kc.float(), vc.float(), bt, ctx, 64 ** -0.5)
+        got = paged_attention_decode(q, kc, vc, bt, ctx, 64 ** -0.5, split_k=1)
+        errors[ctx_len] = (got.float() - want).abs().max().item()
+    assert errors[8192] < 5 * errors[1024] + 1e-3, (
