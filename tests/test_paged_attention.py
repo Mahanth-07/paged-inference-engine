@@ -252,3 +252,24 @@ def test_triton_decode_matches_reference(block_size, num_heads, num_kv_heads,
     want = reference_paged_attention_decode(q, kc, vc, bt, ctx, scale)
     got = paged_attention_decode(q, kc, vc, bt, ctx, scale, split_k=split_k)
     torch.testing.assert_close(got, want, atol=2e-2, rtol=1e-2)
+
+
+@CUDA
+@pytest.mark.parametrize("block_size", [16, 32])
+@pytest.mark.parametrize("num_heads,num_kv_heads", [(8, 2), (32, 8)])
+@pytest.mark.parametrize("context_lens,query_lens", [
+    ([128], [128]),
+    ([300], [44]),                 # chunked: bottom-right causal alignment
+    ([1000, 517, 33], [256, 1, 33]),
+])
+def test_triton_prefill_matches_reference(block_size, num_heads, num_kv_heads,
+                                          context_lens, query_lens):
+    from paged_inference_engine.kernels.paged_attention_triton import paged_attention_prefill
+
+    q, kc, vc, bt, ctx, _ = make_paged_fixture(
+        context_lens, num_heads, num_kv_heads, 64, block_size,
+        dtype=torch.float16, device="cuda", query_lens=query_lens)
+    scale = 64 ** -0.5
+    ql = torch.tensor(query_lens, dtype=torch.int32, device="cuda")
+    qo = torch.tensor([0] + list(torch.tensor(query_lens).cumsum(0)),
+                      dtype=torch.int32, device="cuda")
