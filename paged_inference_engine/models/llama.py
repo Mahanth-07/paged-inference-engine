@@ -214,3 +214,24 @@ class LlamaDecoderLayer(nn.Module):
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
         hidden_states = self.mlp(hidden_states)
         return hidden_states, residual
+
+
+class LlamaModel(nn.Module):
+    def __init__(self, config: ModelConfig, intermediate_size: int, backend: str = "naive",
+                 rope_scaling: Optional[dict] = None):
+        super().__init__()
+        self.config = config
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.layers = nn.ModuleList(
+            [
+                LlamaDecoderLayer(config, i, intermediate_size, backend=backend)
+                for i in range(config.num_layers)
+            ]
+        )
+        self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rotary = RotaryEmbedding(
+            head_dim=config.head_dim,
+            max_position=config.max_model_len,
+            base=config.rope_theta,
+            rope_scaling=rope_scaling,
+        )
