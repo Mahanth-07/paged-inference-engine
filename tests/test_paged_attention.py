@@ -334,3 +334,23 @@ def test_triton_cache_op_skips_negative_slots():
 
 @pytest.mark.parametrize("block_size", [8, 16, 32, 48, 64, 128])
 def test_kv_tile_is_a_legal_multiple_of_the_page_size(block_size):
+    """The KV tile gathers TILE_KV // block_size pages at once, so it must divide
+    exactly, and it must be at least 16 wide or tl.dot refuses to compile (which is
+    what would otherwise rule out block_size=8)."""
+    from paged_inference_engine.kernels.paged_attention_triton import MIN_DOT, _pick_tile_kv
+
+    tile = _pick_tile_kv(block_size)
+    assert tile % block_size == 0
+    assert tile >= MIN_DOT
+
+
+@pytest.mark.parametrize("num_seqs,num_kv_heads,ctx", [
+    (1, 8, 512), (1, 8, 65536), (4, 8, 4096), (64, 8, 4096),
+    (256, 8, 512), (1, 1, 128), (2, 2, 100000),
+])
+def test_split_k_is_always_a_power_of_two(num_seqs, num_kv_heads, ctx):
+    """_combine_kernel indexes the splits with tl.arange(0, SPLIT_K), which requires a
+    power of two. Clamping to `max_useful` after rounding can hand back e.g. 3."""
+    from paged_inference_engine.kernels.paged_attention_triton import choose_split_k
+
+    k = choose_split_k(num_seqs, num_kv_heads, ctx)
