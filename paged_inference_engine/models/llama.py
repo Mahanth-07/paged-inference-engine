@@ -90,3 +90,24 @@ def _llama3_scaled_inv_freq(
 
 
 class RotaryEmbedding(nn.Module):
+    """Precomputed cos/sin tables, indexed by absolute position.
+
+    Recomputing the tables every step is pure waste and shows up in a profile as a
+    surprisingly fat elementwise kernel. Build once at startup, index thereafter.
+    """
+
+    def __init__(
+        self,
+        head_dim: int,
+        max_position: int,
+        base: float = 500000.0,
+        rope_scaling: Optional[dict] = None,
+        dtype: torch.dtype = torch.float32,
+        device: torch.device | str = "cpu",
+    ):
+        super().__init__()
+        self.head_dim = head_dim
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, head_dim, 2, dtype=torch.float32, device=device) / head_dim)
+        )
+        if rope_scaling and str(rope_scaling.get("rope_type", "")).lower() == "llama3":
