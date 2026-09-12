@@ -235,3 +235,24 @@ class LlamaModel(nn.Module):
             base=config.rope_theta,
             rope_scaling=rope_scaling,
         )
+
+    def forward(self, input_ids, positions, kv_caches, model_input):
+        hidden_states = self.embed_tokens(input_ids)
+        residual = None
+        for i, layer in enumerate(self.layers):
+            hidden_states, residual = layer(
+                hidden_states, residual, positions, self.rotary,
+                kv_caches[i] if kv_caches else None, model_input,
+            )
+        hidden_states, _ = self.norm(hidden_states, residual)
+        return hidden_states
+
+
+class LlamaForCausalLM(nn.Module):
+    def __init__(self, config: ModelConfig, intermediate_size: int, backend: str = "naive",
+                 tie_word_embeddings: bool = True, rope_scaling: Optional[dict] = None):
+        super().__init__()
+        self.config = config
+        self.tie_word_embeddings = tie_word_embeddings
+        self.model = LlamaModel(config, intermediate_size, backend=backend,
+                                rope_scaling=rope_scaling)
