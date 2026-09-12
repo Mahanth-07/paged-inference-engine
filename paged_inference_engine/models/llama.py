@@ -131,3 +131,24 @@ class RotaryEmbedding(nn.Module):
 
         cos = self.cos_cache[positions]     # (num_tokens, head_dim/2)
         sin = self.sin_cache[positions]
+        return apply_rope(query, key, cos, sin)
+
+
+# ---------------------------------------------------------------------------
+# transformer blocks
+# ---------------------------------------------------------------------------
+
+
+class LlamaAttention(nn.Module):
+    """qkv fused into one GEMM, then RoPE, then paged attention, then o_proj.
+
+    Three separate small GEMMs for q/k/v is three kernel launches and three passes
+    over the same input. On a 1B model at batch 1 that is measurable.
+    """
+
+    def __init__(self, config: ModelConfig, layer_idx: int, backend: str = "naive"):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.num_heads = config.num_heads
+        self.num_kv_heads = config.num_kv_heads
+        self.head_dim = config.head_dim
