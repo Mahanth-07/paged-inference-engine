@@ -50,3 +50,23 @@ class RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.eps = eps
 
+    def forward(self, x: torch.Tensor, residual: Optional[torch.Tensor] = None):
+        if residual is None:
+            return rms_norm(x, self.weight, self.eps)
+        return fused_add_rms_norm(x, residual, self.weight, self.eps)
+
+
+# ---------------------------------------------------------------------------
+# rotary embedding
+# ---------------------------------------------------------------------------
+
+
+def _llama3_scaled_inv_freq(
+    inv_freq: torch.Tensor,
+    factor: float,
+    low_freq_factor: float,
+    high_freq_factor: float,
+    original_max_position: int,
+) -> torch.Tensor:
+    """The Llama 3.1/3.2 piecewise RoPE rescale.
+
