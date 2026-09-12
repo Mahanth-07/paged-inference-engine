@@ -354,3 +354,12 @@ def test_split_k_is_always_a_power_of_two(num_seqs, num_kv_heads, ctx):
     from paged_inference_engine.kernels.paged_attention_triton import choose_split_k
 
     k = choose_split_k(num_seqs, num_kv_heads, ctx)
+    assert k >= 1 and (k & (k - 1)) == 0, f"SPLIT_K={k} is not a power of two"
+
+
+def test_split_k_is_one_when_the_grid_already_fills_the_gpu():
+    """Splitting a grid that already saturates the SMs just adds combine overhead."""
+    from paged_inference_engine.kernels.paged_attention_triton import choose_split_k
+
+    assert choose_split_k(64, 8, 4096, num_sms=108) == 1
+    assert choose_split_k(1, 8, 16384, num_sms=108) > 1
