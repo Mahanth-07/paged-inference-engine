@@ -152,3 +152,23 @@ class LlamaAttention(nn.Module):
         self.num_heads = config.num_heads
         self.num_kv_heads = config.num_kv_heads
         self.head_dim = config.head_dim
+        self.q_size = self.num_heads * self.head_dim
+        self.kv_size = self.num_kv_heads * self.head_dim
+
+        self.qkv_proj = nn.Linear(config.hidden_size, self.q_size + 2 * self.kv_size, bias=False)
+        self.o_proj = nn.Linear(self.q_size, config.hidden_size, bias=False)
+        self.attn = PagedAttention(
+            num_heads=self.num_heads,
+            num_kv_heads=self.num_kv_heads,
+            head_dim=self.head_dim,
+            scale=self.head_dim ** -0.5,
+            backend=backend,
+            layer_idx=layer_idx,
+        )
+
+    def forward(self, hidden_states, positions, rotary, kv_cache, model_input):
+        qkv = self.qkv_proj(hidden_states)
+        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        num_tokens = hidden_states.shape[0]
+        q = q.view(num_tokens, self.num_heads, self.head_dim)
+        k = k.view(num_tokens, self.num_kv_heads, self.head_dim)
