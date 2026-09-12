@@ -29,3 +29,24 @@ import torch.nn.functional as F
 
 from ..config import ModelConfig
 from ..kernels.fused import fused_add_rms_norm, rms_norm, silu_and_mul
+from ..layers.attention import PagedAttention
+
+
+# ---------------------------------------------------------------------------
+# norms
+# ---------------------------------------------------------------------------
+
+
+class RMSNorm(nn.Module):
+    """x * rsqrt(mean(x^2) + eps) * weight, accumulated in fp32.
+
+    Runs 2N times per forward pass, so M5 fuses the residual add into the same
+    kernel (see kernels/fused.py) -- that halves the number of passes over the
+    hidden state in the decoder block.
+    """
+
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.eps = eps
+
