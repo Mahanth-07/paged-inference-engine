@@ -314,3 +314,23 @@ def test_triton_reshape_and_cache_matches_torch():
 
 
 @CUDA
+def test_triton_cache_op_skips_negative_slots():
+    """Slot -1 means 'padding row, do not write'. That is how CUDA-graph padding is
+    neutralised without a host-side branch, so it has to actually hold."""
+    from paged_inference_engine.kernels.cache_ops import reshape_and_cache_triton
+
+    kc = torch.zeros(4, 16, 2, 64, dtype=torch.float16, device="cuda")
+    vc = torch.zeros_like(kc)
+    key = torch.ones(3, 2, 64, dtype=torch.float16, device="cuda")
+    slots = torch.tensor([5, -1, 20], dtype=torch.int64, device="cuda")
+    reshape_and_cache_triton(key, key, kc, vc, slots)
+    assert kc.count_nonzero() == 2 * 2 * 64, "a -1 slot wrote into the cache"
+
+
+# ---------------------------------------------------------------------------
+# kernel launch geometry -- pure Python, so it is checkable on a laptop
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("block_size", [8, 16, 32, 48, 64, 128])
+def test_kv_tile_is_a_legal_multiple_of_the_page_size(block_size):
