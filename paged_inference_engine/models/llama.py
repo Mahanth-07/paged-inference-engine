@@ -70,3 +70,23 @@ def _llama3_scaled_inv_freq(
 ) -> torch.Tensor:
     """The Llama 3.1/3.2 piecewise RoPE rescale.
 
+    Wavelengths shorter than the original context stay untouched, long ones are
+    divided by `factor`, and there is a smooth ramp in between. Getting this wrong
+    is invisible under 8k tokens and catastrophic above it.
+    """
+    low_wavelen = original_max_position / low_freq_factor
+    high_wavelen = original_max_position / high_freq_factor
+    wavelen = 2 * math.pi / inv_freq
+
+    # long wavelengths (low frequency): divide by factor
+    scaled = torch.where(wavelen > low_wavelen, inv_freq / factor, inv_freq)
+    # smooth ramp in the middle band
+    smooth = (original_max_position / wavelen - low_freq_factor) / (
+        high_freq_factor - low_freq_factor
+    )
+    smoothed = (1 - smooth) * (inv_freq / factor) + smooth * inv_freq
+    is_medium = (wavelen <= low_wavelen) & (wavelen >= high_wavelen)
+    return torch.where(is_medium, smoothed, scaled)
+
+
+class RotaryEmbedding(nn.Module):
