@@ -111,3 +111,23 @@ class RotaryEmbedding(nn.Module):
             base ** (torch.arange(0, head_dim, 2, dtype=torch.float32, device=device) / head_dim)
         )
         if rope_scaling and str(rope_scaling.get("rope_type", "")).lower() == "llama3":
+            inv_freq = _llama3_scaled_inv_freq(
+                inv_freq,
+                float(rope_scaling.get("factor", 8.0)),
+                float(rope_scaling.get("low_freq_factor", 1.0)),
+                float(rope_scaling.get("high_freq_factor", 4.0)),
+                int(rope_scaling.get("original_max_position_embeddings", 8192)),
+            )
+        t = torch.arange(max_position, dtype=torch.float32, device=device)
+        freqs = torch.outer(t, inv_freq)                       # (max_pos, head_dim/2)
+        self.register_buffer("cos_cache", freqs.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cache", freqs.sin().to(dtype), persistent=False)
+
+    def forward(
+        self, positions: torch.Tensor, query: torch.Tensor, key: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """query: (num_tokens, num_heads, head_dim), key: (num_tokens, num_kv_heads, head_dim)."""
+        from ..kernels.fused import apply_rope
+
+        cos = self.cos_cache[positions]     # (num_tokens, head_dim/2)
+        sin = self.sin_cache[positions]
