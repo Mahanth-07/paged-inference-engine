@@ -172,3 +172,24 @@ class LlamaAttention(nn.Module):
         num_tokens = hidden_states.shape[0]
         q = q.view(num_tokens, self.num_heads, self.head_dim)
         k = k.view(num_tokens, self.num_kv_heads, self.head_dim)
+        v = v.view(num_tokens, self.num_kv_heads, self.head_dim)
+        q, k = rotary(positions, q, k)
+        attn_out = self.attn(q, k, v, kv_cache, model_input)
+        # reshape, not view: SDPA and the various kernels do not all return the same
+        # stride layout, and a non-contiguous (tokens, heads, dim) tensor cannot be
+        # viewed as (tokens, heads*dim). reshape is free when it is already contiguous.
+        return self.o_proj(attn_out.reshape(num_tokens, self.q_size))
+
+
+class LlamaMLP(nn.Module):
+    """down(silu(gate(x)) * up(x)), with gate and up fused into one GEMM."""
+
+    def __init__(self, hidden_size: int, intermediate_size: int):
+        super().__init__()
+        self.intermediate_size = intermediate_size
+        self.gate_up_proj = nn.Linear(hidden_size, 2 * intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.down_proj(silu_and_mul(self.gate_up_proj(x)))
+
