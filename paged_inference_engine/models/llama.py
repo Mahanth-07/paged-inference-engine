@@ -193,3 +193,24 @@ class LlamaMLP(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.down_proj(silu_and_mul(self.gate_up_proj(x)))
 
+
+class LlamaDecoderLayer(nn.Module):
+    def __init__(self, config: ModelConfig, layer_idx: int, intermediate_size: int,
+                 backend: str = "naive"):
+        super().__init__()
+        self.self_attn = LlamaAttention(config, layer_idx, backend=backend)
+        self.mlp = LlamaMLP(config.hidden_size, intermediate_size)
+        self.input_layernorm = RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, config.rms_norm_eps)
+
+    def forward(self, hidden_states, residual, positions, rotary, kv_cache, model_input):
+        # The (hidden, residual) pair threading is what lets the norm fuse the add.
+        if residual is None:
+            residual = hidden_states
+            hidden_states = self.input_layernorm(hidden_states)
+        else:
+            hidden_states, residual = self.input_layernorm(hidden_states, residual)
+        hidden_states = self.self_attn(hidden_states, positions, rotary, kv_cache, model_input)
+        hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
+        hidden_states = self.mlp(hidden_states)
+        return hidden_states, residual
