@@ -33,3 +33,18 @@ class ReferenceGenerator:
         )
         # kv_caches=None routes PagedAttention to its cacheless path: plain causal SDPA
         # over the K/V computed in this very call. No block table is involved.
+        hidden = self.model(ids, pos, None, mi)
+        return self.model.compute_logits(hidden, None)
+
+    @torch.inference_mode()
+    def greedy(self, prompt_ids: list[int], max_tokens: int,
+               eos_token_id: int | None = None) -> list[int]:
+        ids = list(prompt_ids)
+        out: list[int] = []
+        for _ in range(max_tokens):
+            nxt = int(self.forward(ids)[-1].argmax())
+            ids.append(nxt)
+            out.append(nxt)
+            if eos_token_id is not None and nxt == eos_token_id:
+                break
+        return out
