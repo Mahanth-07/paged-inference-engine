@@ -13,3 +13,23 @@ from __future__ import annotations
 import torch
 
 from ..model_runner import ModelInput
+
+
+class ReferenceGenerator:
+    def __init__(self, model, device, dtype=None):
+        self.model = model
+        self.device = torch.device(device)
+        self.dtype = dtype
+
+    @torch.inference_mode()
+    def forward(self, token_ids: list[int]) -> torch.Tensor:
+        """Logits for every position of `token_ids`. (len, vocab)."""
+        n = len(token_ids)
+        ids = torch.tensor(token_ids, dtype=torch.int64, device=self.device)
+        pos = torch.arange(n, dtype=torch.int64, device=self.device)
+        mi = ModelInput(
+            input_ids=ids, positions=pos,
+            slot_mapping=torch.empty(0, dtype=torch.int64, device=self.device),
+        )
+        # kv_caches=None routes PagedAttention to its cacheless path: plain causal SDPA
+        # over the K/V computed in this very call. No block table is involved.
