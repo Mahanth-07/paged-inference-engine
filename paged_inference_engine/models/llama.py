@@ -256,3 +256,24 @@ class LlamaForCausalLM(nn.Module):
         self.tie_word_embeddings = tie_word_embeddings
         self.model = LlamaModel(config, intermediate_size, backend=backend,
                                 rope_scaling=rope_scaling)
+        if tie_word_embeddings:
+            self.lm_head = None
+        else:
+            self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+    def forward(self, input_ids, positions, kv_caches, model_input):
+        return self.model(input_ids, positions, kv_caches, model_input)
+
+    def compute_logits(self, hidden_states, logits_indices=None):
+        """Only compute logits where they are needed.
+
+        A 128k-vocab lm_head over all 8192 batched tokens instead of over the ~64
+        positions that actually need a token is a real and common waste: it is the
+        single biggest GEMM in the step and most of it is thrown away.
+        """
+        if logits_indices is not None:
+            hidden_states = hidden_states.index_select(0, logits_indices)
+        weight = self.model.embed_tokens.weight if self.lm_head is None else self.lm_head.weight
+        return F.linear(hidden_states, weight)
+
+    # ---- weight loading ---------------------------------------------------
