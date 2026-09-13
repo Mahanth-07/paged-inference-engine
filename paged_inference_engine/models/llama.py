@@ -338,3 +338,8 @@ class LlamaForCausalLM(nn.Module):
         for name in dict(self.named_parameters()):
             if name.endswith("qkv_proj.weight"):
                 expected[name] = 3
+            elif name.endswith("gate_up_proj.weight"):
+                expected[name] = 2
+            else:
+                expected[name] = 1
+        return expected
