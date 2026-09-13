@@ -317,3 +317,24 @@ class LlamaForCausalLM(nn.Module):
 
             if target not in params:
                 continue
+            param = params[target]
+            src = tensor.to(dtype=param.dtype)
+            if sl is None:
+                if param.shape != src.shape:
+                    raise ValueError(f"shape mismatch for {name}: {tuple(param.shape)} vs {tuple(src.shape)}")
+                param.data.copy_(src)
+            else:
+                param.data[sl].copy_(src)
+            loaded[target] = loaded.get(target, 0) + 1
+        return loaded
+
+    def expected_write_counts(self) -> dict[str, int]:
+        """How many checkpoint tensors should land in each of our params.
+
+        Fused buffers expect more than one: qkv_proj gets q, k and v; gate_up_proj gets
+        gate and up. Compare against load_weights()'s return value at startup.
+        """
+        expected = {}
+        for name in dict(self.named_parameters()):
+            if name.endswith("qkv_proj.weight"):
+                expected[name] = 3
