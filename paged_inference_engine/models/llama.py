@@ -277,3 +277,23 @@ class LlamaForCausalLM(nn.Module):
         return F.linear(hidden_states, weight)
 
     # ---- weight loading ---------------------------------------------------
+
+    # HF checkpoint name -> (our param name, fused-buffer slice index or None)
+    _FUSED_QKV = {"q_proj": 0, "k_proj": 1, "v_proj": 2}
+    _FUSED_MLP = {"gate_proj": 0, "up_proj": 1}
+
+    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> dict[str, int]:
+        """Load an HF Llama checkpoint, fusing q/k/v and gate/up on the way in.
+
+        Returns {our_param_name: number_of_writes} so the caller can assert nothing was
+        left at its random init and that every fused buffer got all of its pieces.
+        A missing weight produces fluent garbage, which is the hardest failure to notice.
+        """
+        params = dict(self.named_parameters())
+        loaded: dict[str, int] = {}
+        cfg = self.config
+        q_size, kv_size = cfg.num_heads * cfg.head_dim, cfg.num_kv_heads * cfg.head_dim
+        qkv_offsets = [0, q_size, q_size + kv_size, q_size + 2 * kv_size]
+
+        for name, tensor in weights:
+            if name.endswith(".rotary_emb.inv_freq") or "rotary_emb" in name:
