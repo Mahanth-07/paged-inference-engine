@@ -297,3 +297,23 @@ class LlamaForCausalLM(nn.Module):
 
         for name, tensor in weights:
             if name.endswith(".rotary_emb.inv_freq") or "rotary_emb" in name:
+                continue
+            if name == "lm_head.weight" and self.tie_word_embeddings:
+                continue  # tied -- embed_tokens is the source of truth
+
+            target, sl = name, None
+            for hf_name, idx in self._FUSED_QKV.items():
+                if f"self_attn.{hf_name}.weight" in name:
+                    target = name.replace(f"self_attn.{hf_name}", "self_attn.qkv_proj")
+                    sl = slice(qkv_offsets[idx], qkv_offsets[idx + 1])
+                    break
+            else:
+                for hf_name, idx in self._FUSED_MLP.items():
+                    if f"mlp.{hf_name}.weight" in name:
+                        target = name.replace(f"mlp.{hf_name}", "mlp.gate_up_proj")
+                        inter = params[target].shape[0] // 2
+                        sl = slice(idx * inter, (idx + 1) * inter)
+                        break
+
+            if target not in params:
+                continue
