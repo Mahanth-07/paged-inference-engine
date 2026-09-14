@@ -148,3 +148,23 @@ def test_all_backends_agree(backend):
     torch.cuda.empty_cache()
 
     got = greedy(build_engine(dtype="float16", backend=backend), ids, 32)
+    assert got == want, f"{backend} diverged from naive"
+
+
+@pytest.mark.parametrize("block_size", [8, 16, 32, 64])
+def test_block_size_does_not_change_output(block_size):
+    """Block size is a memory/efficiency knob, not a semantic one. If it changes the
+    answer, the slot mapping or the last-page masking is wrong."""
+    ids = build_engine(dtype="float16").tokenizer.encode(PROMPT)
+    want = greedy(build_engine(dtype="float16", block_size=16), ids, 24)
+    torch.cuda.empty_cache()
+    assert greedy(build_engine(dtype="float16", block_size=block_size), ids, 24) == want
+
+
+# ---------------------------------------------------------------------------
+# M3: scheduling must not change the answer
+# ---------------------------------------------------------------------------
+
+
+def test_batched_matches_unbatched(engine):
+    """A prompt generated alone must produce the same tokens as when it is batched with
