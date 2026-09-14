@@ -188,3 +188,23 @@ def test_batched_matches_unbatched(engine):
     assert batched[:8] == batched[8:16] == batched[16:24] == batched[24:32]
 
 
+@pytest.mark.parametrize("budget", [16, 64, 4096])
+def test_chunked_prefill_is_output_preserving(budget):
+    """Chunked prefill splits a prompt across steps, so the later chunks' queries sit at
+    absolute positions that are not 0..n. Bottom-right causal alignment is what makes
+    that correct; top-left alignment passes the unchunked case and fails these."""
+    e0 = build_engine(dtype="float16", max_num_batched_tokens=4096)
+    ids = e0.tokenizer.encode(PROMPT * 4)
+    want = greedy(e0, ids, 16)
+    del e0
+    torch.cuda.empty_cache()
+    got = greedy(build_engine(dtype="float16", max_num_batched_tokens=budget), ids, 16)
+    assert got == want
+
+
+def test_preemption_is_output_preserving():
+    """A KV cache small enough to force preemption must not change a single token. If
+    it does, the recompute path is losing or duplicating tokens -- most likely by
+    re-prefilling only the prompt and not the already-generated tokens."""
+    from paged_inference_engine.sampling import SamplingParams
+
