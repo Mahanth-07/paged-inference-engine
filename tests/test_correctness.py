@@ -23,3 +23,24 @@ PROMPT = "The capital of France is Paris, and the capital of Germany is"
 
 
 def build_engine(dtype="float32", backend="naive", **kw):
+    from paged_inference_engine.config import CacheConfig, EngineConfig, ModelConfig, SchedulerConfig
+    from paged_inference_engine.engine import LLMEngine
+
+    cfg = EngineConfig(
+        model=ModelConfig(model=MODEL, dtype=dtype,
+                          max_model_len=kw.pop("max_model_len", 2048)),
+        cache=CacheConfig(block_size=kw.pop("block_size", 16),
+                          num_gpu_blocks=kw.pop("num_gpu_blocks", 2048),
+                          enable_prefix_caching=kw.pop("prefix_caching", False)),
+        scheduler=SchedulerConfig(
+            max_num_batched_tokens=kw.pop("max_num_batched_tokens", 2048),
+            max_num_seqs=kw.pop("max_num_seqs", 64),
+            enable_chunked_prefill=kw.pop("chunked_prefill", True)),
+        attention_backend=backend, device="cuda", enforce_eager=kw.pop("eager", True),
+    )
+    return LLMEngine(cfg)
+
+
+@pytest.fixture(scope="module")
+def engine():
+    return build_engine()
