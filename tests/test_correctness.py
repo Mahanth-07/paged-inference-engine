@@ -106,3 +106,24 @@ def test_paged_engine_logits_match_the_cacheless_reference(engine):
     torch.testing.assert_close(got.float(), want.float(), atol=1e-3, rtol=1e-3)
     engine.scheduler.abort(sched.all_seqs[0].seq_id)
 
+
+def test_greedy_output_matches_hf_token_for_token(engine, hf):
+    """64 greedy tokens, identical ids, in fp32.
+
+    bf16 legitimately diverges after ~30 tokens from numerical drift alone, so this
+    test runs in fp32. If it still diverges there, the bug is real.
+    """
+    ids = engine.tokenizer.encode(PROMPT)
+    with torch.inference_mode():
+        want = hf.generate(torch.tensor([ids], device="cuda"), max_new_tokens=64,
+                           min_new_tokens=64, do_sample=False,
+                           pad_token_id=engine.tokenizer.eos_token_id)
+    want_ids = want[0, len(ids):].tolist()
+    assert greedy(engine, ids, 64) == want_ids
+
+
+# ---------------------------------------------------------------------------
+# M2c: do all the backends agree?
+# ---------------------------------------------------------------------------
+
+
