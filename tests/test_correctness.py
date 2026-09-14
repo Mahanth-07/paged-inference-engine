@@ -208,3 +208,24 @@ def test_preemption_is_output_preserving():
     re-prefilling only the prompt and not the already-generated tokens."""
     from paged_inference_engine.sampling import SamplingParams
 
+    e0 = build_engine(dtype="float16", num_gpu_blocks=4096)
+    tok = e0.tokenizer
+    prompts = [tok.encode(PROMPT[:n]) for n in (20, 40, 60, 77)]
+    sp = SamplingParams(temperature=0.0, max_tokens=128, ignore_eos=True)
+    want = [o.token_ids for o in e0.generate(prompt_token_ids=[list(p) for p in prompts],
+                                             sampling_params=sp)]
+    del e0
+    torch.cuda.empty_cache()
+
+    tight = build_engine(dtype="float16", num_gpu_blocks=48, max_num_seqs=8,
+                         max_num_batched_tokens=128)
+    got = [o.token_ids for o in tight.generate(prompt_token_ids=[list(p) for p in prompts],
+                                               sampling_params=sp)]
+    assert tight.scheduler.num_preemptions > 0, "cache was not small enough to preempt"
+    assert got == want
+
+
+# ---------------------------------------------------------------------------
+# M5
+# ---------------------------------------------------------------------------
+
