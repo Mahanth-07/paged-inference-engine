@@ -168,3 +168,23 @@ def test_block_size_does_not_change_output(block_size):
 
 def test_batched_matches_unbatched(engine):
     """A prompt generated alone must produce the same tokens as when it is batched with
+    31 others of different lengths.
+
+    This catches the nastiest class of bug in the project: cross-sequence contamination
+    from a wrong block table, attention mask, or query_start_loc. The output stays
+    fluent, so you will not notice by reading it.
+    """
+    from paged_inference_engine.sampling import SamplingParams
+
+    tok = engine.tokenizer
+    prompts = [tok.encode(PROMPT[:n]) for n in (12, 20, 31, 44, 57, 63, 70, 77)] * 4
+    sp = SamplingParams(temperature=0.0, max_tokens=16, ignore_eos=True)
+
+    solo = [greedy(engine, p, 16) for p in prompts[:8]]
+    batched = [o.token_ids for o in
+               engine.generate(prompt_token_ids=[list(p) for p in prompts],
+                               sampling_params=sp)]
+    assert batched[:8] == solo
+    assert batched[:8] == batched[8:16] == batched[16:24] == batched[24:32]
+
+
