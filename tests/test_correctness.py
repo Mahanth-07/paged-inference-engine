@@ -44,3 +44,24 @@ def build_engine(dtype="float32", backend="naive", **kw):
 @pytest.fixture(scope="module")
 def engine():
     return build_engine()
+
+
+@pytest.fixture(scope="module")
+def hf():
+    from transformers import AutoModelForCausalLM
+
+    m = AutoModelForCausalLM.from_pretrained(MODEL, torch_dtype=torch.float32).cuda().eval()
+    yield m
+    del m
+    torch.cuda.empty_cache()
+
+
+def greedy(engine, prompt_ids, n):
+    from paged_inference_engine.sampling import SamplingParams
+
+    out = engine.generate(prompt_token_ids=[list(prompt_ids)],
+                          sampling_params=SamplingParams(temperature=0.0, max_tokens=n,
+                                                         ignore_eos=True))
+    return out[0].token_ids
+
+
