@@ -85,3 +85,24 @@ def test_logits_match_hf(engine, hf):
     got = ReferenceGenerator(engine.model_runner.model, "cuda").forward(ids).float()
     torch.testing.assert_close(got, want, atol=1e-2, rtol=1e-2)
 
+
+def test_paged_engine_logits_match_the_cacheless_reference(engine):
+    """Separates 'our model is wrong' from 'our paging is wrong'. If the previous test
+    passes and this one fails, the bug is in the block table, not the math."""
+    from paged_inference_engine.models.reference import ReferenceGenerator
+
+    ids = engine.tokenizer.encode(PROMPT)
+    want = ReferenceGenerator(engine.model_runner.model, "cuda").forward(ids)[-1]
+
+    runner = engine.model_runner
+    from paged_inference_engine.sampling import SamplingParams
+
+    engine.add_request(prompt_token_ids=ids, sampling_params=SamplingParams(max_tokens=1))
+    sched = engine.scheduler.schedule()
+    mi, _ = runner.prepare_inputs(sched, engine.block_manager)
+    with torch.inference_mode():
+        h = runner.model(mi.input_ids, mi.positions, runner.kv_caches, mi)
+        got = runner.model.compute_logits(h, mi.logits_indices)[0]
+    torch.testing.assert_close(got.float(), want.float(), atol=1e-3, rtol=1e-3)
+    engine.scheduler.abort(sched.all_seqs[0].seq_id)
+
