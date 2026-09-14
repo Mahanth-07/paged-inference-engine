@@ -65,3 +65,23 @@ def greedy(engine, prompt_ids, n):
     return out[0].token_ids
 
 
+# ---------------------------------------------------------------------------
+# M1: does our modeling code compute the same function?
+# ---------------------------------------------------------------------------
+
+
+def test_logits_match_hf(engine, hf):
+    """fp32, single forward pass, first 20 positions.
+
+    If this fails, bisect layer by layer -- compare hidden states after the embedding,
+    after layer 0's input norm, after attention, after the MLP. The first mismatch tells
+    you exactly which component is wrong. Do not debug the whole model at once.
+    """
+    from paged_inference_engine.models.reference import ReferenceGenerator
+
+    ids = engine.tokenizer.encode(PROMPT)[:20]
+    with torch.inference_mode():
+        want = hf(torch.tensor([ids], device="cuda")).logits[0].float()
+    got = ReferenceGenerator(engine.model_runner.model, "cuda").forward(ids).float()
+    torch.testing.assert_close(got, want, atol=1e-2, rtol=1e-2)
+
