@@ -229,3 +229,23 @@ def test_preemption_is_output_preserving():
 # M5
 # ---------------------------------------------------------------------------
 
+
+def test_prefix_caching_is_output_preserving_and_hits():
+    """Two requests sharing a long system prompt must produce the same output with
+    prefix caching on and off, AND the hit rate must be high. A correct-but-never-
+    hitting cache passes the first assertion and is worthless."""
+    from paged_inference_engine.sampling import SamplingParams
+
+    e0 = build_engine(dtype="float16")
+    tok = e0.tokenizer
+    system = "You are a helpful assistant. " * 40
+    prompts = [tok.encode(system + q) for q in
+               ["What is 2+2?", "Name a color.", "Say hi.", "Count to three."]]
+    sp = SamplingParams(temperature=0.0, max_tokens=16, ignore_eos=True)
+    want = [o.token_ids for o in e0.generate(prompt_token_ids=[list(p) for p in prompts],
+                                             sampling_params=sp)]
+    del e0
+    torch.cuda.empty_cache()
+
+    e1 = build_engine(dtype="float16", prefix_caching=True)
+    got = [o.token_ids for o in e1.generate(prompt_token_ids=[list(p) for p in prompts],
