@@ -127,3 +127,24 @@ def test_greedy_output_matches_hf_token_for_token(engine, hf):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("backend", ["naive", "flashinfer", "flash_attn", "triton"])
+def test_all_backends_agree(backend):
+    """Same prompt, same seed, greedy -- every backend produces identical text.
+
+    This is the test that certifies the kernel. Skips (rather than fails) when the
+    backend's library is not installed, so it is useful on any box.
+    """
+    if backend == "flashinfer":
+        pytest.importorskip("flashinfer")
+    if backend == "flash_attn":
+        pytest.importorskip("flash_attn")
+    if backend == "triton":
+        pytest.importorskip("triton")
+
+    ref = build_engine(dtype="float16", backend="naive")
+    ids = ref.tokenizer.encode(PROMPT)
+    want = greedy(ref, ids, 32)
+    del ref
+    torch.cuda.empty_cache()
+
+    got = greedy(build_engine(dtype="float16", backend=backend), ids, 32)
