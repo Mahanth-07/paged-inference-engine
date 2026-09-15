@@ -65,3 +65,24 @@ class ModelInput:
 
     logits_indices: Optional[torch.Tensor] = None
     use_split_k: Optional[int] = None
+
+    @property
+    def is_decode_only(self) -> bool:
+        return self.num_prefills == 0 and self.num_decodes > 0
+
+
+class AttentionState:
+    """Owns the FlashInfer workspace and wrappers.
+
+    They live here rather than on each attention layer for one reason: plan() is the
+    expensive part of FlashInfer and it depends only on the step's page table, not on
+    the layer. Planning once per step instead of once per layer is a 16x reduction in
+    that cost on a 1B model.
+    """
+
+    def __init__(self, config: EngineConfig, num_kv_heads: int, num_heads: int,
+                 head_dim: int, dtype: torch.dtype, device: str):
+        self.enabled = config.attention_backend == "flashinfer"
+        self.num_heads, self.num_kv_heads, self.head_dim = num_heads, num_kv_heads, head_dim
+        self.dtype, self.device = dtype, device
+        self.page_size = config.cache.block_size
