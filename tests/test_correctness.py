@@ -269,3 +269,17 @@ def test_cuda_graphs_are_output_preserving():
     assert e1.model_runner.graphs, "no graphs were captured"
     assert greedy(e1, ids, 32) == want
 
+
+def test_weight_loading_covers_every_parameter():
+    """A parameter the checkpoint never wrote stays at its random init and produces
+    fluent garbage. The loader asserts coverage at startup; this proves the assert
+    is real by checking the counts directly."""
+    from paged_inference_engine.config import EngineConfig, ModelConfig
+    from paged_inference_engine.model_runner import ModelRunner
+
+    runner = ModelRunner(EngineConfig(model=ModelConfig(model=MODEL, dtype="float16"),
+                                      device="cuda"), load=False)
+    runner.load_model()   # raises if coverage is incomplete
+    model = runner.model
+    counts = model.load_weights(ModelRunner._iter_hf_weights(MODEL))
+    assert counts == model.expected_write_counts()
