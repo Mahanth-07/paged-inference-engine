@@ -249,3 +249,23 @@ def test_prefix_caching_is_output_preserving_and_hits():
 
     e1 = build_engine(dtype="float16", prefix_caching=True)
     got = [o.token_ids for o in e1.generate(prompt_token_ids=[list(p) for p in prompts],
+                                            sampling_params=sp)]
+    assert got == want
+    assert e1.stats()["prefix_cache_hit_rate"] > 0.5, e1.stats()
+
+
+def test_cuda_graphs_are_output_preserving():
+    """Graph replay must be bit-comparable to eager. The usual failure is a padded row
+    in the captured batch writing its garbage K/V into a live block -- which shows up
+    as another sequence's output changing, not as a crash."""
+    pytest.importorskip("triton")
+    e0 = build_engine(dtype="float16", backend="triton", eager=True)
+    ids = e0.tokenizer.encode(PROMPT)
+    want = greedy(e0, ids, 32)
+    del e0
+    torch.cuda.empty_cache()
+
+    e1 = build_engine(dtype="float16", backend="triton", eager=False, max_num_seqs=8)
+    assert e1.model_runner.graphs, "no graphs were captured"
+    assert greedy(e1, ids, 32) == want
+
