@@ -45,3 +45,23 @@ class ModelInput:
     num_prefill_tokens: int = 0
     num_decodes: int = 0
 
+    # prefill (varlen) metadata
+    qo_indptr: Optional[torch.Tensor] = None            # (num_prefills+1,) int32
+    prefill_query_lens: Optional[torch.Tensor] = None   # (num_prefills,) int32
+    prefill_context_lens: Optional[torch.Tensor] = None # (num_prefills,) int32, AFTER this chunk
+    prefill_block_tables: Optional[torch.Tensor] = None # (num_prefills, max_pages) int32
+    prefill_kv_cu_seqlens: Optional[torch.Tensor] = None
+    max_query_len: int = 0
+    max_prefill_context_len: int = 0
+
+    # decode metadata
+    decode_block_tables: Optional[torch.Tensor] = None  # (num_decodes, max_pages) int32
+    decode_context_lens: Optional[torch.Tensor] = None  # (num_decodes,) int32
+    max_decode_context_len: int = 0
+
+    # FlashInfer wrappers, planned ONCE per step (never per layer)
+    fi_prefill: Any = None
+    fi_decode: Any = None
+
+    logits_indices: Optional[torch.Tensor] = None
+    use_split_k: Optional[int] = None
