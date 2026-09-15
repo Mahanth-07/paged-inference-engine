@@ -86,3 +86,24 @@ class AttentionState:
         self.num_heads, self.num_kv_heads, self.head_dim = num_heads, num_kv_heads, head_dim
         self.dtype, self.device = dtype, device
         self.page_size = config.cache.block_size
+        self.prefill_wrapper = None
+        self.decode_wrapper = None
+        if not self.enabled:
+            return
+        import flashinfer
+
+        # 128MB is plenty and it is allocated once, at startup, on purpose.
+        self.workspace = torch.empty(128 * 1024 * 1024, dtype=torch.uint8, device=device)
+        self.prefill_wrapper = flashinfer.BatchPrefillWithPagedKVCacheWrapper(
+            self.workspace, "NHD")
+        self.decode_wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(
+            self.workspace, "NHD")
+
+    def plan(self, mi: ModelInput, prefill_csr, decode_csr) -> None:
+        if not self.enabled:
+            return
+        if mi.num_prefills:
+            self.prefill_wrapper.plan(
+                mi.qo_indptr, *prefill_csr,
+                num_qo_heads=self.num_heads, num_kv_heads=self.num_kv_heads,
+                head_dim_qk=self.head_dim, page_size=self.page_size,
