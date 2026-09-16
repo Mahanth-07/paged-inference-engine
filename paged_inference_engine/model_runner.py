@@ -128,3 +128,23 @@ class ModelRunner:
         self.model = None
         self.tokenizer = None
         self.kv_caches: list[torch.Tensor] = []
+        self.graphs: dict[int, "CUDAGraphRunner"] = {}
+        self.num_blocks = 0
+        self.attn_state: Optional[AttentionState] = None
+        self.sampler = Sampler(device=str(self.device), seed=config.model.seed)
+        # Reserved scratch block, one past the pool the BlockManager hands out. Padded
+        # rows in a CUDA-graph batch write their garbage K/V here instead of needing a
+        # host-side branch. Costs one block; buys a branch-free capture.
+        self.scratch_block = 0
+        if load:
+            self.load_model()
+
+    # ---- setup ------------------------------------------------------------
+
+    def load_model(self) -> None:
+        """Build the model and load HF safetensors directly.
+
+        Deliberately does NOT go through transformers' from_pretrained -- the point of
+        the exercise is the modeling code. What it does use transformers for is the
+        tokenizer and the config json, which are not the interesting part.
+        """
