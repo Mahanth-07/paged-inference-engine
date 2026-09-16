@@ -107,3 +107,24 @@ class AttentionState:
                 mi.qo_indptr, *prefill_csr,
                 num_qo_heads=self.num_heads, num_kv_heads=self.num_kv_heads,
                 head_dim_qk=self.head_dim, page_size=self.page_size,
+                causal=True, q_data_type=self.dtype,
+            )
+            mi.fi_prefill = self.prefill_wrapper
+        if mi.num_decodes:
+            self.decode_wrapper.plan(
+                *decode_csr,
+                num_qo_heads=self.num_heads, num_kv_heads=self.num_kv_heads,
+                head_dim=self.head_dim, page_size=self.page_size,
+                q_data_type=self.dtype,
+            )
+            mi.fi_decode = self.decode_wrapper
+
+
+class ModelRunner:
+    def __init__(self, config: EngineConfig, load: bool = True):
+        self.config = config
+        self.device = torch.device(config.device)
+        self.dtype = _DTYPES.get(config.model.dtype) or torch.float32
+        self.model = None
+        self.tokenizer = None
+        self.kv_caches: list[torch.Tensor] = []
