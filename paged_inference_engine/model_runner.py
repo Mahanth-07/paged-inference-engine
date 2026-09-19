@@ -148,3 +148,23 @@ class ModelRunner:
         the exercise is the modeling code. What it does use transformers for is the
         tokenizer and the config json, which are not the interesting part.
         """
+        from .models.llama import LlamaForCausalLM
+
+        mc = self.config.model
+        if mc.model == "__random__":
+            self._init_random_model()
+            return
+
+        from transformers import AutoConfig, AutoTokenizer
+
+        hf = AutoConfig.from_pretrained(mc.model, trust_remote_code=mc.trust_remote_code)
+        mc.hidden_size = hf.hidden_size
+        mc.num_layers = hf.num_hidden_layers
+        mc.num_heads = hf.num_attention_heads
+        mc.num_kv_heads = getattr(hf, "num_key_value_heads", hf.num_attention_heads)
+        mc.head_dim = getattr(hf, "head_dim", None) or hf.hidden_size // hf.num_attention_heads
+        mc.intermediate_size = hf.intermediate_size
+        mc.vocab_size = hf.vocab_size
+        mc.rope_theta = float(getattr(hf, "rope_theta", 500000.0))
+        mc.rms_norm_eps = float(getattr(hf, "rms_norm_eps", 1e-5))
+        mc.tie_word_embeddings = bool(getattr(hf, "tie_word_embeddings", False))
