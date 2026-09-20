@@ -229,3 +229,23 @@ class ModelRunner:
         model = LlamaForCausalLM(
             mc, mc.intermediate_size, backend=self.config.attention_backend,
             tie_word_embeddings=mc.tie_word_embeddings, rope_scaling=mc.rope_scaling,
+        )
+        # std=0.1, not the usual 0.02. A small-std random transformer is close to the
+        # identity: with tied embeddings its argmax is just the last input token, every
+        # step, for every prompt. Every "output is unchanged" test would then pass
+        # vacuously -- including with a completely broken block table. At 0.1 the
+        # outputs actually depend on the attended context, which is the whole point of
+        # having a fixture.
+        for p in model.parameters():
+            if p.dim() > 1:
+                torch.nn.init.normal_(p, std=0.1)
+        self.model = model.to(device=self.device, dtype=self.dtype).eval()
+        self.tokenizer = None
+        self._post_init()
+
+    def _post_init(self) -> None:
+        mc = self.config.model
+        self.attn_state = AttentionState(
+            self.config, mc.num_kv_heads, mc.num_heads, mc.head_dim, self.dtype,
+            str(self.device),
+        )
