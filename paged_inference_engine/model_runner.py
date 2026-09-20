@@ -168,3 +168,23 @@ class ModelRunner:
         mc.rope_theta = float(getattr(hf, "rope_theta", 500000.0))
         mc.rms_norm_eps = float(getattr(hf, "rms_norm_eps", 1e-5))
         mc.tie_word_embeddings = bool(getattr(hf, "tie_word_embeddings", False))
+        mc.rope_scaling = getattr(hf, "rope_scaling", None)
+        mc.max_model_len = min(mc.max_model_len, getattr(hf, "max_position_embeddings", 1 << 30))
+
+        self.tokenizer = AutoTokenizer.from_pretrained(mc.model)
+
+        with torch.device("meta"):
+            model = LlamaForCausalLM(
+                mc, mc.intermediate_size, backend=self.config.attention_backend,
+                tie_word_embeddings=mc.tie_word_embeddings, rope_scaling=mc.rope_scaling,
+            )
+        model.to_empty(device=self.device)
+        model = model.to(self.dtype)
+        # RoPE tables were on `meta`; rebuild them for real on the target device.
+        model.model.rotary = type(model.model.rotary)(
+            head_dim=mc.head_dim, max_position=mc.max_model_len, base=mc.rope_theta,
+            rope_scaling=mc.rope_scaling, dtype=torch.float32, device=self.device,
+        )
+
+        counts = model.load_weights(self._iter_hf_weights(mc.model))
+        expected = model.expected_write_counts()
