@@ -208,3 +208,24 @@ class ModelRunner:
         if not os.path.isdir(path):
             from huggingface_hub import snapshot_download
 
+            path = snapshot_download(model_id, allow_patterns=["*.safetensors", "*.json"])
+        files = sorted(glob.glob(os.path.join(path, "*.safetensors")))
+        if not files:
+            raise FileNotFoundError(f"no safetensors in {path}")
+        for f in files:
+            with safe_open(f, framework="pt", device="cpu") as sf:
+                for name in sf.keys():
+                    yield name, sf.get_tensor(name)
+
+    def _init_random_model(self) -> None:
+        """The CPU correctness fixture from configs/tiny.yaml: a real model with random
+        weights, small enough that the naive backend is fast. Everything the engine does
+        -- paging, chunked prefill, preemption, batching -- is exercised for free."""
+        from .models.llama import LlamaForCausalLM
+
+        mc = self.config.model
+        mc.intermediate_size = mc.intermediate_size or 4 * mc.hidden_size
+        torch.manual_seed(mc.seed)
+        model = LlamaForCausalLM(
+            mc, mc.intermediate_size, backend=self.config.attention_backend,
+            tie_word_embeddings=mc.tie_word_embeddings, rope_scaling=mc.rope_scaling,
