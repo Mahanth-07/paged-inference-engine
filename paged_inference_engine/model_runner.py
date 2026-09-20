@@ -188,3 +188,23 @@ class ModelRunner:
 
         counts = model.load_weights(self._iter_hf_weights(mc.model))
         expected = model.expected_write_counts()
+        missing = {k: (counts.get(k, 0), v) for k, v in expected.items() if counts.get(k, 0) != v}
+        if missing:
+            raise RuntimeError(
+                "checkpoint did not fully cover the model -- these params would be left "
+                f"at random init: {missing}"
+            )
+        self.model = model.eval()
+        self._post_init()
+
+    @staticmethod
+    def _iter_hf_weights(model_id: str):
+        """Stream (name, tensor) pairs out of the safetensors shards, one at a time."""
+        import glob
+
+        from safetensors.torch import safe_open
+
+        path = model_id
+        if not os.path.isdir(path):
+            from huggingface_hub import snapshot_download
+
