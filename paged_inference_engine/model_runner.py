@@ -353,3 +353,24 @@ class ModelRunner:
             )
         with torch.inference_mode():
             h = self.model(mi.input_ids, mi.positions, caches, mi)
+            self.model.compute_logits(h, mi.logits_indices)
+        del caches
+
+    # ---- the hot path -----------------------------------------------------
+
+    def prepare_inputs(self, sched: SchedulerOutput, bm: BlockManager) -> tuple[ModelInput, list[Sequence]]:
+        """Build every tensor for this step, and return the sequences that will get a token.
+
+        Everything is accumulated into flat Python lists and shipped in one pinned,
+        non-blocking copy per tensor. A per-sequence `.to(device)` is a sync per
+        sequence and dominates the profile at batch 256.
+        """
+        bsz = bm.block_size
+        input_ids: list[int] = []
+        positions: list[int] = []
+        slot_mapping: list[int] = []
+        logits_indices: list[int] = []
+        out_seqs: list[Sequence] = []
+
+        qo_indptr = [0]
+        prefill_qlens: list[int] = []
