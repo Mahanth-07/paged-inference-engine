@@ -291,3 +291,23 @@ class ModelRunner:
         free, total = torch.cuda.mem_get_info()
         weight_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters())
 
+        n_tok = self.config.scheduler.max_num_batched_tokens
+        self._dummy_forward(n_tok)
+        torch.cuda.synchronize()
+        activation_peak = torch.cuda.max_memory_allocated() - weight_bytes
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        num_blocks = compute_num_gpu_blocks(
+            total_memory_bytes=total, weight_bytes=weight_bytes,
+            activation_peak_bytes=max(activation_peak, 0),
+            num_layers=mc.num_layers, num_kv_heads=mc.num_kv_heads, head_dim=mc.head_dim,
+            block_size=cc.block_size,
+            dtype_bytes=torch.tensor([], dtype=self.dtype).element_size(),
+            utilization=cc.gpu_memory_utilization,
+        )
+        if num_blocks <= 0:
+            raise RuntimeError(
+                f"no room for a KV cache: weights {weight_bytes/2**30:.1f} GiB + "
+                f"activations {activation_peak/2**30:.1f} GiB at "
+                f"{cc.gpu_memory_utilization:.0%} of {total/2**30:.1f} GiB"
