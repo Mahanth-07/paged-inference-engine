@@ -311,3 +311,24 @@ class ModelRunner:
                 f"no room for a KV cache: weights {weight_bytes/2**30:.1f} GiB + "
                 f"activations {activation_peak/2**30:.1f} GiB at "
                 f"{cc.gpu_memory_utilization:.0%} of {total/2**30:.1f} GiB"
+            )
+        print(f"[paged-inference-engine] KV cache: {num_blocks:,} blocks = "
+              f"{num_blocks * cc.block_size:,} tokens "
+              f"({num_blocks * 2 * cc.block_size * mc.num_kv_heads * mc.head_dim * mc.num_layers * torch.tensor([], dtype=self.dtype).element_size() / 2**30:.2f} GiB)")
+        self.allocate_kv_cache(num_blocks)
+        return num_blocks
+
+    def _dummy_forward(self, num_tokens: int) -> None:
+        """One forward pass at the widest batch the scheduler can produce, with a
+        throwaway one-block cache, purely to observe the activation high-water mark."""
+        mc = self.config.model
+        bs = self.config.cache.block_size
+        pages = (num_tokens + bs - 1) // bs + 1
+        caches = [
+            torch.zeros(2, pages, bs, mc.num_kv_heads, mc.head_dim,
+                        dtype=self.dtype, device=self.device)
+            for _ in range(mc.num_layers)
+        ]
+        dev = self.device
+        mi = ModelInput(
+            input_ids=torch.zeros(num_tokens, dtype=torch.int64, device=dev),
