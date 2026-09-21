@@ -249,3 +249,24 @@ class ModelRunner:
             self.config, mc.num_kv_heads, mc.num_heads, mc.head_dim, self.dtype,
             str(self.device),
         )
+
+    def allocate_kv_cache(self, num_blocks: int) -> None:
+        """One tensor per layer: (2, num_blocks + 1, block_size, num_kv_heads, head_dim).
+
+        Allocated ALL at once, up front. Growing the cache at runtime reintroduces
+        exactly the fragmentation and unpredictable OOMs that paging exists to remove.
+
+        The +1 is the scratch block described in __init__; the BlockManager is only ever
+        told about `num_blocks`, so it can never hand it out.
+        """
+        mc = self.config.model
+        bs = self.config.cache.block_size
+        self.num_blocks = num_blocks
+        self.scratch_block = num_blocks
+        self.kv_caches = [
+            torch.zeros(2, num_blocks + 1, bs, mc.num_kv_heads, mc.head_dim,
+                        dtype=self.dtype, device=self.device)
+            for _ in range(mc.num_layers)
+        ]
+
+    def profile_num_blocks(self) -> int:
