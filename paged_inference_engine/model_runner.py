@@ -332,3 +332,24 @@ class ModelRunner:
         dev = self.device
         mi = ModelInput(
             input_ids=torch.zeros(num_tokens, dtype=torch.int64, device=dev),
+            positions=torch.arange(num_tokens, dtype=torch.int64, device=dev) % mc.max_model_len,
+            slot_mapping=torch.arange(num_tokens, dtype=torch.int64, device=dev),
+            num_prefills=1, num_prefill_tokens=num_tokens, num_decodes=0,
+            qo_indptr=torch.tensor([0, num_tokens], dtype=torch.int32, device=dev),
+            prefill_query_lens=torch.tensor([num_tokens], dtype=torch.int32, device=dev),
+            prefill_context_lens=torch.tensor([num_tokens], dtype=torch.int32, device=dev),
+            prefill_block_tables=torch.arange(pages, dtype=torch.int32, device=dev).unsqueeze(0),
+            prefill_kv_cu_seqlens=torch.tensor([0, num_tokens], dtype=torch.int32, device=dev),
+            max_query_len=num_tokens, max_prefill_context_len=num_tokens,
+            logits_indices=torch.tensor([num_tokens - 1], dtype=torch.int64, device=dev),
+        )
+        if self.attn_state and self.attn_state.enabled:
+            self.attn_state.plan(
+                mi,
+                (torch.tensor([0, pages], dtype=torch.int32, device=dev),
+                 torch.arange(pages, dtype=torch.int32, device=dev),
+                 torch.tensor([bs], dtype=torch.int32, device=dev)),
+                None,
+            )
+        with torch.inference_mode():
+            h = self.model(mi.input_ids, mi.positions, caches, mi)
