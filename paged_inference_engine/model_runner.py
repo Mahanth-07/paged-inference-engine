@@ -270,3 +270,24 @@ class ModelRunner:
         ]
 
     def profile_num_blocks(self) -> int:
+        """Measure the activation peak with a real forward pass, then divide up what's left.
+
+        Hardcoding a guess for the activation peak is the classic source of "works at
+        batch 8, OOMs at batch 64" -- the peak scales with max_num_batched_tokens, so
+        profile at exactly that width.
+        """
+        cc = self.config.cache
+        if cc.num_gpu_blocks is not None:
+            self.allocate_kv_cache(cc.num_gpu_blocks)
+            return cc.num_gpu_blocks
+        if self.device.type != "cuda":
+            n = 1024
+            self.allocate_kv_cache(n)
+            return n
+
+        mc = self.config.model
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        free, total = torch.cuda.mem_get_info()
+        weight_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters())
+
