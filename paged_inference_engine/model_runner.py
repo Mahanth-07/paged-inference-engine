@@ -374,3 +374,23 @@ class ModelRunner:
 
         qo_indptr = [0]
         prefill_qlens: list[int] = []
+        prefill_ctx: list[int] = []
+        prefill_seqs: list[Sequence] = []
+
+        for s in sched.prefills:
+            seq = s.seq
+            start = seq.num_computed_tokens
+            end = start + s.num_tokens
+            toks = seq.all_token_ids
+            input_ids.extend(toks[start:end])
+            positions.extend(range(start, end))
+            slot_mapping.extend(bm.slot_mapping(seq, start, end))
+            qo_indptr.append(qo_indptr[-1] + s.num_tokens)
+            prefill_qlens.append(s.num_tokens)
+            prefill_ctx.append(end)
+            prefill_seqs.append(seq)
+            # A chunk that computes the sequence's last uncomputed token emits a token;
+            # a partial chunk does not.
+            if end >= seq.total_len:
+                logits_indices.append(len(input_ids) - 1)
+                out_seqs.append(seq)
