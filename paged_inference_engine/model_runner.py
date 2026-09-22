@@ -435,3 +435,23 @@ class ModelRunner:
             mi.prefill_kv_cu_seqlens = t(cu, torch.int32)
             mi.max_query_len = max(prefill_qlens)
             mi.max_prefill_context_len = max(prefill_ctx)
+            if self.attn_state and self.attn_state.enabled:
+                meta = bm.paged_kv_metadata(prefill_seqs)
+                prefill_csr = (t(meta["kv_indptr"], torch.int32),
+                               t(meta["kv_indices"], torch.int32),
+                               t(meta["kv_last_page_len"], torch.int32))
+
+        if decode_seqs:
+            tables = bm.block_tables_padded(decode_seqs)
+            mi.decode_block_tables = t(tables, torch.int32)
+            mi.decode_context_lens = t(decode_ctx, torch.int32)
+            mi.max_decode_context_len = max(decode_ctx)
+            if self.attn_state and self.attn_state.enabled:
+                meta = bm.paged_kv_metadata(decode_seqs)
+                decode_csr = (t(meta["kv_indptr"], torch.int32),
+                              t(meta["kv_indices"], torch.int32),
+                              t(meta["kv_last_page_len"], torch.int32))
+
+        if self.attn_state:
+            self.attn_state.plan(mi, prefill_csr, decode_csr)
+        return mi, out_seqs
