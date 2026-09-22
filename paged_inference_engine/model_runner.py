@@ -394,3 +394,23 @@ class ModelRunner:
             if end >= seq.total_len:
                 logits_indices.append(len(input_ids) - 1)
                 out_seqs.append(seq)
+
+        num_prefill_tokens = len(input_ids)
+
+        decode_ctx: list[int] = []
+        decode_seqs: list[Sequence] = []
+        for s in sched.decodes:
+            seq = s.seq
+            pos = seq.total_len - 1                  # the token sampled last step
+            input_ids.append(seq.all_token_ids[pos])
+            positions.append(pos)
+            slot_mapping.append(seq.slot_for_token(pos, bsz))
+            decode_ctx.append(seq.total_len)
+            decode_seqs.append(seq)
+            logits_indices.append(len(input_ids) - 1)
+            out_seqs.append(seq)
+
+        t = self._to_device
+
+        mi = ModelInput(
+            input_ids=t(input_ids, torch.int64),
