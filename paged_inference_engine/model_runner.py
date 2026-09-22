@@ -414,3 +414,24 @@ class ModelRunner:
 
         mi = ModelInput(
             input_ids=t(input_ids, torch.int64),
+            positions=t(positions, torch.int64),
+            slot_mapping=t(slot_mapping, torch.int64),
+            num_prefills=len(prefill_seqs),
+            num_prefill_tokens=num_prefill_tokens,
+            num_decodes=len(decode_seqs),
+            logits_indices=t(logits_indices, torch.int64),
+        )
+
+        prefill_csr = decode_csr = None
+        if prefill_seqs:
+            tables = bm.block_tables_padded(prefill_seqs)
+            mi.qo_indptr = t(qo_indptr, torch.int32)
+            mi.prefill_query_lens = t(prefill_qlens, torch.int32)
+            mi.prefill_context_lens = t(prefill_ctx, torch.int32)
+            mi.prefill_block_tables = t(tables, torch.int32)
+            cu = [0]
+            for c in prefill_ctx:
+                cu.append(cu[-1] + c)
+            mi.prefill_kv_cu_seqlens = t(cu, torch.int32)
+            mi.max_query_len = max(prefill_qlens)
+            mi.max_prefill_context_len = max(prefill_ctx)
