@@ -455,3 +455,24 @@ class ModelRunner:
         if self.attn_state:
             self.attn_state.plan(mi, prefill_csr, decode_csr)
         return mi, out_seqs
+
+    def _to_device(self, data, dtype):
+        """One pinned, non-blocking H2D copy. Pinning only helps on CUDA; elsewhere it
+        is an error, so it is conditional."""
+        if self.device.type == "cuda":
+            cpu = torch.tensor(data, dtype=dtype, pin_memory=True)
+            return cpu.to(self.device, non_blocking=True)
+        return torch.tensor(data, dtype=dtype, device=self.device)
+
+    @torch.inference_mode()
+    def execute_model(self, sched: SchedulerOutput, bm: BlockManager) -> dict[Sequence, int]:
+        """Run one forward pass, return {sequence: sampled_token_id}.
+
+        A sequence mid chunked-prefill contributes tokens to the batch but gets no
+        output this step -- it is not in the returned dict.
+        """
+        # Copy-on-write first: a shared block must be duplicated BEFORE this step writes
+        # new K/V into it, or we corrupt whoever else is still reading it.
+        if sched.blocks_to_copy:
+            copy_blocks(self.kv_caches, sched.blocks_to_copy)
+
