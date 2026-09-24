@@ -476,3 +476,23 @@ class ModelRunner:
         if sched.blocks_to_copy:
             copy_blocks(self.kv_caches, sched.blocks_to_copy)
 
+        mi, out_seqs = self.prepare_inputs(sched, bm)
+        if not out_seqs and mi.input_ids.numel() == 0:
+            return {}
+
+        graph = self._maybe_graph(mi)
+        if graph is not None:
+            logits = graph.replay(mi)
+        else:
+            hidden = self.model(mi.input_ids, mi.positions, self.kv_caches, mi)
+            logits = self.model.compute_logits(hidden, mi.logits_indices)
+
+        if not out_seqs:
+            return {}
+        params = [s.sampling_params for s in out_seqs]
+        tokens = self.sampler(logits, params)
+        # ONE device->host sync per step. Not zero, but not per-sequence either.
+        return dict(zip(out_seqs, tokens.tolist()))
+
+    # ---- CUDA graphs (M5) --------------------------------------------------
+
