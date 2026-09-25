@@ -558,3 +558,24 @@ class CUDAGraphRunner:
                                        runner.scratch_block * runner.config.cache.block_size,
                                        dtype=torch.int64, device=dev)
         self.block_tables = torch.full((batch_size, max_pages), runner.scratch_block,
+                                       dtype=torch.int32, device=dev)
+        self.context_lens = torch.ones(batch_size, dtype=torch.int32, device=dev)
+        self.logits_indices = torch.arange(batch_size, dtype=torch.int64, device=dev)
+        self.graph: Optional[torch.cuda.CUDAGraph] = None
+        self.output: Optional[torch.Tensor] = None
+
+    def _model_input(self) -> ModelInput:
+        return ModelInput(
+            input_ids=self.input_ids, positions=self.positions,
+            slot_mapping=self.slot_mapping,
+            num_prefills=0, num_prefill_tokens=0, num_decodes=self.batch_size,
+            decode_block_tables=self.block_tables, decode_context_lens=self.context_lens,
+            logits_indices=self.logits_indices,
+            use_split_k=1,   # split-K picks its grid from a host-side max(); pin it
+        )
+
+    def capture(self, pool):
+        r = self.runner
+        mi = self._model_input()
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
