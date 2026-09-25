@@ -619,3 +619,21 @@ class DummyModelRunner:
         self.config = config
         self._num_blocks = num_blocks
         self.vocab_size = vocab_size
+        self.tokenizer = None
+        self.sim_time = 0.0
+
+    def profile_num_blocks(self) -> int:
+        return self._num_blocks
+
+    def execute_model(self, sched: SchedulerOutput, block_manager: BlockManager) -> dict:
+        prefill_tokens = sum(s.num_tokens for s in sched.prefills)
+        num_decodes = len(sched.decodes)
+        self.sim_time += 2e-5 * prefill_tokens + 4e-3 + 2e-5 * num_decodes
+
+        out = {}
+        for s in sched.decodes:
+            out[s.seq] = 42
+        for s in sched.prefills:
+            if s.seq.num_computed_tokens + s.num_tokens >= s.seq.total_len:
+                out[s.seq] = 42
+        return out
