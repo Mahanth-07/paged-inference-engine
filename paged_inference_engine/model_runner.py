@@ -579,3 +579,23 @@ class CUDAGraphRunner:
         mi = self._model_input()
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream), torch.inference_mode():
+            for _ in range(3):   # warm up: force lazy init out of the capture region
+                h = r.model(mi.input_ids, mi.positions, r.kv_caches, mi)
+                r.model.compute_logits(h, mi.logits_indices)
+        torch.cuda.current_stream().wait_stream(stream)
+
+        self.graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(self.graph, pool=pool), torch.inference_mode():
+            h = r.model(mi.input_ids, mi.positions, r.kv_caches, mi)
+            self.output = r.model.compute_logits(h, mi.logits_indices)
+        return self.graph.pool()
+
+    def replay(self, mi: ModelInput) -> torch.Tensor:
+        n = mi.num_decodes
+        self.input_ids[:n].copy_(mi.input_ids, non_blocking=True)
+        self.positions[:n].copy_(mi.positions, non_blocking=True)
+        self.slot_mapping[:n].copy_(mi.slot_mapping, non_blocking=True)
+        self.slot_mapping[n:].fill_(
+            self.runner.scratch_block * self.runner.config.cache.block_size)
+        self.context_lens[:n].copy_(mi.decode_context_lens, non_blocking=True)
