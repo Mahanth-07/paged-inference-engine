@@ -599,3 +599,23 @@ class CUDAGraphRunner:
         self.slot_mapping[n:].fill_(
             self.runner.scratch_block * self.runner.config.cache.block_size)
         self.context_lens[:n].copy_(mi.decode_context_lens, non_blocking=True)
+        self.context_lens[n:].fill_(1)
+        pages = mi.decode_block_tables.shape[1]
+        self.block_tables[:n, :pages].copy_(mi.decode_block_tables, non_blocking=True)
+        self.block_tables[n:].fill_(self.runner.scratch_block)
+        self.graph.replay()
+        return self.output[:n]
+
+
+class DummyModelRunner:
+    """A fake runner with a cost model, so the scheduler can be developed on a laptop.
+
+    Latency model is crude but directionally right: prefill is compute-bound and roughly
+    linear in tokens; decode is memory-bound and roughly constant per step plus a small
+    per-sequence term for the KV sweep.
+    """
+
+    def __init__(self, config: EngineConfig, num_blocks: int = 4096, vocab_size: int = 32000):
+        self.config = config
+        self._num_blocks = num_blocks
+        self.vocab_size = vocab_size
