@@ -537,3 +537,24 @@ class ModelRunner:
             runner = CUDAGraphRunner(self, size, max_pages)
             pool = runner.capture(pool)
             self.graphs[size] = runner
+        print(f"[paged-inference-engine] captured CUDA graphs for batch sizes {sizes}")
+
+
+class CUDAGraphRunner:
+    """One captured decode step at a fixed batch size.
+
+    All graphs share a memory pool so capturing 13 buckets does not cost 13 copies of
+    the activation workspace.
+    """
+
+    def __init__(self, runner: ModelRunner, batch_size: int, max_pages: int):
+        self.runner = runner
+        self.batch_size = batch_size
+        dev = runner.device
+        self.input_ids = torch.zeros(batch_size, dtype=torch.int64, device=dev)
+        self.positions = torch.zeros(batch_size, dtype=torch.int64, device=dev)
+        # scratch slot: padded rows write their garbage K/V into the reserved block
+        self.slot_mapping = torch.full((batch_size,),
+                                       runner.scratch_block * runner.config.cache.block_size,
+                                       dtype=torch.int64, device=dev)
+        self.block_tables = torch.full((batch_size, max_pages), runner.scratch_block,
