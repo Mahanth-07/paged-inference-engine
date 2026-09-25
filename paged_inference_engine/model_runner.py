@@ -516,3 +516,24 @@ class ModelRunner:
         Requirements that will bite you, all handled by CUDAGraphRunner:
           - every input tensor must be preallocated at max shape and reused, because a
             graph captures POINTERS, not values
+          - no CPU-GPU sync inside the captured region (so: no .item(), no .tolist())
+          - block_tables must be a fixed-shape buffer you memcpy into
+          - padded rows must be harmless: they write K/V to the scratch block and read
+            a context length of 1
+          - warm up eagerly first, or the capture records lazy-init work
+        """
+        if self.config.enforce_eager or self.device.type != "cuda":
+            return
+        if self.config.attention_backend == "flashinfer":
+            print("[paged-inference-engine] flashinfer + CUDA graphs needs the wrapper's own capture "
+                  "mode; staying eager. Use --backend triton for the graph ablation.")
+            return
+        max_bs = self.config.scheduler.max_num_seqs
+        sizes = [s for s in self.config.cuda_graph_batch_sizes if s <= max_bs]
+        max_pages = (self.config.model.max_model_len + self.config.cache.block_size - 1) \
+            // self.config.cache.block_size
+        pool = None
+        for size in sizes:
+            runner = CUDAGraphRunner(self, size, max_pages)
+            pool = runner.capture(pool)
+            self.graphs[size] = runner
