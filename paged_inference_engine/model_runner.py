@@ -496,3 +496,23 @@ class ModelRunner:
 
     # ---- CUDA graphs (M5) --------------------------------------------------
 
+    def _maybe_graph(self, mi: ModelInput):
+        if not self.graphs or not mi.is_decode_only:
+            return None
+        for size in sorted(self.graphs):
+            if size >= mi.num_decodes:
+                return self.graphs[size]
+        return None
+
+    def capture_cuda_graphs(self) -> None:
+        """Capture the decode-only path at bucketed batch sizes.
+
+        At batch size 1 on a 1B model, kernel launch overhead is typically 40-60% of the
+        step: ~16 layers x ~8 kernels each, every one of them a few microseconds of GPU
+        work behind a few microseconds of launch. A graph replays the whole step as a
+        single submission. This is the single biggest and most demoable win in M5 --
+        capture an nsys timeline before and after.
+
+        Requirements that will bite you, all handled by CUDAGraphRunner:
+          - every input tensor must be preallocated at max shape and reused, because a
+            graph captures POINTERS, not values
