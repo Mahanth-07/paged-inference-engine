@@ -63,3 +63,24 @@ def gen(engine, prompts, sp=GREEDY):
 
 
 def test_paged_engine_matches_cacheless_reference():
+    """The M1 oracle. If this fails, nothing below it means anything."""
+    engine = make_engine()
+    ref = ReferenceGenerator(engine.model_runner.model, "cpu")
+    got = gen(engine, PROMPTS)
+    for prompt, tokens in zip(PROMPTS, got):
+        assert tokens == ref.greedy(prompt, GREEDY.max_tokens), f"diverged on {prompt[:5]}..."
+
+
+def test_logits_match_reference_not_just_argmax():
+    """argmax agreement is a weak signal on a random-weight model: a broken attention
+    can still pick the same token. Compare the logits themselves."""
+    engine = make_engine()
+    ref = ReferenceGenerator(engine.model_runner.model, "cpu")
+    prompt = list(range(20, 60))
+    want = ref.forward(prompt)[-1]
+
+    runner = engine.model_runner
+    engine.add_request(prompt_token_ids=prompt, sampling_params=GREEDY)
+    sched = engine.scheduler.schedule()
+    mi, _ = runner.prepare_inputs(sched, engine.block_manager)
+    with torch.inference_mode():
