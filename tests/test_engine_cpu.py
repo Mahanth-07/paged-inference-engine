@@ -43,3 +43,23 @@ def make_engine(**overrides) -> LLMEngine:
 
 PROMPTS = [
     [5, 6, 7, 8, 9, 10, 11, 12, 13],
+    [1, 2, 3],
+    list(range(20, 60)),
+    [7] * 35,
+    list(range(200, 217)),          # 17 tokens: one past a 16-block boundary
+    list(range(300, 332)),          # 32 tokens: exactly two blocks
+]
+
+
+def gen_outputs(engine, prompts, sp=GREEDY):
+    return engine.generate(prompt_token_ids=copy.deepcopy(prompts), sampling_params=sp)
+
+
+def gen(engine, prompts, sp=GREEDY):
+    return [o.token_ids for o in gen_outputs(engine, prompts, sp)]
+
+
+# ---------------------------------------------------------------------------
+
+
+def test_paged_engine_matches_cacheless_reference():
