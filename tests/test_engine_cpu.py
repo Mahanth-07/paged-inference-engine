@@ -104,3 +104,24 @@ def test_batched_matches_unbatched():
 def test_many_sequences_of_mixed_lengths():
     """32 concurrent sequences with lengths that straddle block boundaries."""
     prompts = [list(range(100, 100 + n)) for n in (1, 15, 16, 17, 31, 32, 33, 64)] * 4
+    solo = [gen(make_engine(max_num_seqs=1, max_num_batched_tokens=512), [p])[0]
+            for p in prompts[:8]]
+    batched = gen(make_engine(max_num_seqs=32, max_num_batched_tokens=256), prompts)
+    assert batched[:8] == solo
+    assert batched[:8] == batched[8:16] == batched[16:24] == batched[24:32]
+
+
+@pytest.mark.parametrize("block_size", [8, 16, 32])
+def test_block_size_does_not_change_output(block_size):
+    """Block size is a memory/efficiency knob. If it changes the answer, the slot
+    mapping or the last-page masking is wrong."""
+    baseline = gen(make_engine(block_size=16), PROMPTS)
+    assert gen(make_engine(block_size=block_size), PROMPTS) == baseline
+
+
+@pytest.mark.parametrize("chunked", [True, False])
+def test_chunked_prefill_does_not_change_output(chunked):
+    """Chunked prefill splits a prompt across steps, so the second chunk's queries sit
+    at absolute positions that are not 0..n. Getting that wrong is invisible unless you
+    diff against the unchunked run."""
+    baseline = gen(make_engine(chunked_prefill=True, max_num_batched_tokens=512), PROMPTS)
