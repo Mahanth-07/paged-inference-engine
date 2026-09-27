@@ -146,3 +146,23 @@ LONG = SamplingParams(temperature=0.0, max_tokens=64, ignore_eos=True)
 
 def test_preemption_is_output_preserving():
     """Run with a KV cache small enough to force preemption; the output must be
+    identical to an unpreempted run. If it is not, the recompute path is losing or
+    duplicating tokens."""
+    baseline = gen(make_engine(num_gpu_blocks=512), PROMPTS, LONG)
+    engine = make_engine(num_gpu_blocks=24, max_num_seqs=8, max_num_batched_tokens=64)
+    got = gen(engine, PROMPTS, LONG)
+    assert engine.scheduler.num_preemptions > 0, "cache was not small enough to preempt"
+    assert got == baseline
+
+
+def test_preemption_does_not_leak_blocks():
+    engine = make_engine(num_gpu_blocks=24, max_num_seqs=8, max_num_batched_tokens=64)
+    gen(engine, PROMPTS, LONG)
+    assert engine.scheduler.num_preemptions > 0
+    engine.block_manager.allocator.check_invariants()
+    assert engine.block_manager.num_free_blocks == 24
+
+
+def test_blocks_are_returned_after_every_run():
+    engine = make_engine()
+    before = engine.block_manager.num_free_blocks
