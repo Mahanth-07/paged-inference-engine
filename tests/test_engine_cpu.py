@@ -125,3 +125,24 @@ def test_chunked_prefill_does_not_change_output(chunked):
     at absolute positions that are not 0..n. Getting that wrong is invisible unless you
     diff against the unchunked run."""
     baseline = gen(make_engine(chunked_prefill=True, max_num_batched_tokens=512), PROMPTS)
+    got = gen(make_engine(chunked_prefill=chunked, max_num_batched_tokens=16), PROMPTS) \
+        if chunked else gen(make_engine(chunked_prefill=False,
+                                        max_num_batched_tokens=512), PROMPTS)
+    assert got == baseline
+
+
+@pytest.mark.parametrize("budget", [1, 2, 3, 5])
+def test_tiny_chunks_still_correct(budget):
+    """Prefill a couple of tokens at a time. Maximally adversarial for the absolute-
+    position bookkeeping and for the bottom-right causal alignment."""
+    baseline = gen(make_engine(max_num_batched_tokens=512), PROMPTS)
+    assert gen(make_engine(max_num_batched_tokens=budget, max_num_seqs=4), PROMPTS) == baseline
+
+
+# Long outputs against a tight cache: the pressure has to arrive DURING decode, because
+# admission control already refuses to over-commit at prefill time.
+LONG = SamplingParams(temperature=0.0, max_tokens=64, ignore_eos=True)
+
+
+def test_preemption_is_output_preserving():
+    """Run with a KV cache small enough to force preemption; the output must be
