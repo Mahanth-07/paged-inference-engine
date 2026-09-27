@@ -84,3 +84,23 @@ def test_logits_match_reference_not_just_argmax():
     sched = engine.scheduler.schedule()
     mi, _ = runner.prepare_inputs(sched, engine.block_manager)
     with torch.inference_mode():
+        hidden = runner.model(mi.input_ids, mi.positions, runner.kv_caches, mi)
+        got = runner.model.compute_logits(hidden, mi.logits_indices)[0]
+    torch.testing.assert_close(got, want, atol=1e-4, rtol=1e-4)
+
+
+def test_batched_matches_unbatched():
+    """The nastiest class of bug in the project: cross-sequence contamination from a
+    wrong block table, attention mask, or query_start_loc. The output stays fluent, so
+    reading it tells you nothing."""
+    solo = []
+    for p in PROMPTS:
+        e = make_engine(max_num_seqs=1, max_num_batched_tokens=512)
+        solo.append(gen(e, [p])[0])
+    batched = gen(make_engine(max_num_seqs=8, max_num_batched_tokens=64), PROMPTS)
+    assert batched == solo
+
+
+def test_many_sequences_of_mixed_lengths():
+    """32 concurrent sequences with lengths that straddle block boundaries."""
+    prompts = [list(range(100, 100 + n)) for n in (1, 15, 16, 17, 31, 32, 33, 64)] * 4
