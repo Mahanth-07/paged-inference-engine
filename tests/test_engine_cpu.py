@@ -227,3 +227,23 @@ def test_waiting_request_joins_on_the_next_step():
     seen_second = False
     for _ in range(20):
         engine.step()
+        if len(engine.scheduler.waiting) == 0 and engine.scheduler.running:
+            seen_second = True
+        if not engine.has_unfinished_requests():
+            break
+    assert seen_second and not engine.has_unfinished_requests()
+
+
+def test_streaming_emits_one_output_per_token():
+    engine = make_engine()
+    engine.add_request(prompt_token_ids=[5, 6, 7], sampling_params=GREEDY)
+    emitted = 0
+    while engine.has_unfinished_requests():
+        for out in engine.step():
+            emitted += len(out.new_token_ids) if not out.finished or out.new_token_ids else 0
+    assert emitted == GREEDY.max_tokens
+
+
+def test_max_tokens_is_clamped_to_max_model_len():
+    engine = make_engine()
+    engine.config.model.max_model_len = 64
