@@ -288,3 +288,24 @@ def test_prompt_that_can_never_fit_in_the_cache_is_rejected():
 def test_rejected_request_still_produces_an_output():
     """The failure that matters: a dropped request leaves an HTTP client hanging until
     it times out, which is far worse than an error and much harder to debug."""
+    engine = make_engine(num_gpu_blocks=4, block_size=16, max_num_seqs=4)
+    engine.add_request(prompt_token_ids=list(range(300)), sampling_params=GREEDY)
+    seen = []
+    for _ in range(10):
+        seen.extend(engine.step())
+        if not engine.has_unfinished_requests():
+            break
+    assert not engine.has_unfinished_requests()
+    assert len(seen) == 1 and seen[0].finished and seen[0].finish_reason == "ignored"
+
+
+@pytest.mark.skipif(not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()),
+                    reason="needs Apple MPS")
+def test_engine_runs_on_mps_and_matches_cpu():
+    """Apple GPU parity. Worth having on a MacBook: MPS is ~10x faster than CPU for the
+    fixture model, and it catches ops that only exist on CUDA/CPU -- `index_copy_`, for
+    one, which MPS does not implement at all."""
+    cpu = gen(make_engine(), PROMPTS)
+
+    cfg = make_engine().config
+    cfg.device = "mps"
