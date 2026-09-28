@@ -186,3 +186,24 @@ def test_prefix_caching_is_output_preserving_and_hits():
     assert hit_rate > 0.5, f"prefix cache barely hit: {hit_rate:.2f}"
 
 
+def test_prefix_cache_does_not_confuse_identical_blocks_in_different_contexts():
+    """Block hashes are CHAINED with the previous block's hash. Without chaining, the
+    same 16 tokens appearing after a different prefix would wrongly share KV -- and KV
+    depends on the whole preceding context, so the output would be silently wrong."""
+    common = list(range(400, 416))                      # one full block, appears twice
+    a = list(range(1, 17)) + common + [50, 51]
+    b = list(range(30, 46)) + common + [50, 51]
+    off = gen(make_engine(num_gpu_blocks=512), [a, b])
+    on = gen(make_engine(num_gpu_blocks=512, prefix_caching=True), [a, b])
+    assert on == off
+    assert off[0] != off[1], "fixture is degenerate: the two prefixes gave the same answer"
+
+
+def test_finished_sequence_leaves_the_batch_immediately():
+    """Iteration-level batching: a request that finishes must free its slot on the very
+    next step, not when the longest member of some batch finishes. That difference is
+    the entire throughput argument against HF `generate`."""
+    engine = make_engine(max_num_seqs=4, max_num_batched_tokens=256)
+    short = SamplingParams(temperature=0.0, max_tokens=2, ignore_eos=True)
+    long = SamplingParams(temperature=0.0, max_tokens=30, ignore_eos=True)
+    engine.add_request(prompt_token_ids=[1, 2, 3], sampling_params=short)
