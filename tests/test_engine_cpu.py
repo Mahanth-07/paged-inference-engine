@@ -207,3 +207,23 @@ def test_finished_sequence_leaves_the_batch_immediately():
     short = SamplingParams(temperature=0.0, max_tokens=2, ignore_eos=True)
     long = SamplingParams(temperature=0.0, max_tokens=30, ignore_eos=True)
     engine.add_request(prompt_token_ids=[1, 2, 3], sampling_params=short)
+    engine.add_request(prompt_token_ids=[4, 5, 6], sampling_params=long)
+
+    running_after_short_finished = None
+    for _ in range(40):
+        outs = engine.step()
+        if any(o.finished for o in outs) and running_after_short_finished is None:
+            running_after_short_finished = len(engine.scheduler.running)
+        if not engine.has_unfinished_requests():
+            break
+    assert running_after_short_finished == 1, "finished sequence kept its slot"
+
+
+def test_waiting_request_joins_on_the_next_step():
+    engine = make_engine(max_num_seqs=1, max_num_batched_tokens=256)
+    short = SamplingParams(temperature=0.0, max_tokens=2, ignore_eos=True)
+    engine.add_request(prompt_token_ids=[1, 2, 3], sampling_params=short)
+    engine.add_request(prompt_token_ids=[4, 5, 6], sampling_params=short)
+    seen_second = False
+    for _ in range(20):
+        engine.step()
