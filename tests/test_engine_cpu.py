@@ -267,3 +267,24 @@ def test_max_tokens_is_clamped_to_max_model_len():
 def test_oversized_prompt_is_rejected_not_stalled_without_chunked_prefill():
     """Without chunked prefill, a prompt wider than the whole token budget can never be
     scheduled. Under FCFS it would block every request behind it forever. It must be
+    rejected at admission, and the requests behind it must still complete."""
+    engine = make_engine(chunked_prefill=False, max_num_batched_tokens=32,
+                         max_num_seqs=4, num_gpu_blocks=512)
+    outs = gen_outputs(engine, [list(range(200, 300)), [1, 2, 3], [4, 5, 6]])
+    assert engine.scheduler.num_rejected == 1
+    assert len(outs) == 3, "requests behind the unschedulable one were starved"
+    assert sorted(o.finish_reason for o in outs) == ["ignored", "length", "length"]
+
+
+def test_prompt_that_can_never_fit_in_the_cache_is_rejected():
+    """A prompt larger than the entire KV cache is not a 'wait longer' condition."""
+    engine = make_engine(num_gpu_blocks=4, block_size=16, max_num_batched_tokens=4096,
+                         max_num_seqs=4)
+    outs = gen_outputs(engine, [list(range(300)), [1, 2, 3]])
+    assert engine.scheduler.num_rejected == 1
+    assert {o.finish_reason for o in outs} == {"ignored", "length"}
+
+
+def test_rejected_request_still_produces_an_output():
+    """The failure that matters: a dropped request leaves an HTTP client hanging until
+    it times out, which is far worse than an error and much harder to debug."""
