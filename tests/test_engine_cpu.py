@@ -309,3 +309,8 @@ def test_engine_runs_on_mps_and_matches_cpu():
 
     cfg = make_engine().config
     cfg.device = "mps"
+    from paged_inference_engine.engine import LLMEngine
+
+    mps = [o.token_ids for o in LLMEngine(cfg).generate(
+        prompt_token_ids=copy.deepcopy(PROMPTS), sampling_params=GREEDY)]
+    assert mps == cpu
