@@ -247,3 +247,23 @@ def test_streaming_emits_one_output_per_token():
 def test_max_tokens_is_clamped_to_max_model_len():
     engine = make_engine()
     engine.config.model.max_model_len = 64
+    engine.max_model_len = 64
+    sid = engine.add_request(prompt_token_ids=list(range(60)),
+                             sampling_params=SamplingParams(max_tokens=1000,
+                                                            ignore_eos=True))
+    seq = next(s for s in engine.scheduler.waiting if s.seq_id == sid)
+    assert seq.sampling_params.max_tokens == 4
+
+    with pytest.raises(ValueError):
+        engine.add_request(prompt_token_ids=list(range(70)),
+                           sampling_params=SamplingParams())
+
+
+# ---------------------------------------------------------------------------
+# admission control: unschedulable requests must fail loudly, not stall
+# ---------------------------------------------------------------------------
+
+
+def test_oversized_prompt_is_rejected_not_stalled_without_chunked_prefill():
+    """Without chunked prefill, a prompt wider than the whole token budget can never be
+    scheduled. Under FCFS it would block every request behind it forever. It must be
