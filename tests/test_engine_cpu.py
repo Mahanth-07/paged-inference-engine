@@ -166,3 +166,23 @@ def test_preemption_does_not_leak_blocks():
 def test_blocks_are_returned_after_every_run():
     engine = make_engine()
     before = engine.block_manager.num_free_blocks
+    for _ in range(3):
+        gen(engine, PROMPTS)
+        engine.block_manager.allocator.check_invariants()
+        assert engine.block_manager.num_free_blocks == before
+
+
+def test_prefix_caching_is_output_preserving_and_hits():
+    """Two properties, and the second one is the one people forget: a correct cache
+    that never hits passes the equality assertion and buys nothing."""
+    system = list(range(100, 180))                      # shared 80-token system prompt
+    prompts = [system + [i, i + 1, i + 2] for i in range(5, 12)]
+
+    off = gen(make_engine(num_gpu_blocks=512), prompts)
+    engine = make_engine(num_gpu_blocks=512, prefix_caching=True)
+    on = gen(engine, prompts)
+    assert on == off
+    hit_rate = engine.stats()["prefix_cache_hit_rate"]
+    assert hit_rate > 0.5, f"prefix cache barely hit: {hit_rate:.2f}"
+
+
