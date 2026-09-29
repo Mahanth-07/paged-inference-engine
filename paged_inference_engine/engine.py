@@ -34,3 +34,24 @@ class Detokenizer:
     """
 
     def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self._text: dict[int, str] = {}
+
+    def decode_delta(self, seq: Sequence) -> tuple[str, str]:
+        if self.tokenizer is None:
+            return "", ""
+        full = self.tokenizer.decode(seq.output_token_ids, skip_special_tokens=True)
+        prev = self._text.get(seq.seq_id, "")
+        if full.endswith("�"):
+            return prev, ""            # incomplete codepoint: wait for the next token
+        self._text[seq.seq_id] = full
+        return full, full[len(prev):]
+
+    def finish(self, seq: Sequence) -> str:
+        text = self._text.pop(seq.seq_id, "")
+        return text
+
+
+class LLMEngine:
+    def __init__(self, config: EngineConfig, model_runner=None):
+        self.config = config
