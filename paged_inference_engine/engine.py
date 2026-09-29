@@ -178,3 +178,24 @@ class LLMEngine:
         prompts: Iterable[str] | None = None,
         sampling_params: SamplingParams | None = None,
         prompt_token_ids: Optional[list[list[int]]] = None,
+    ) -> list[RequestOutput]:
+        """Offline batch API, for throughput benchmarks. Returns one output per request,
+        in submission order."""
+        sp = sampling_params or SamplingParams()
+        order: list[int] = []
+        if prompt_token_ids is not None:
+            for ids in prompt_token_ids:
+                order.append(self.add_request(prompt_token_ids=ids, sampling_params=sp))
+        else:
+            for p in prompts or []:
+                order.append(self.add_request(prompt=p, sampling_params=sp))
+
+        final: dict[int, RequestOutput] = {}
+        while self.has_unfinished_requests():
+            for out in self.step():
+                if out.finished:
+                    final[out.seq_id] = out
+        return [final[i] for i in order if i in final]
+
+    def stats(self) -> dict:
+        s = self.scheduler.stats()
