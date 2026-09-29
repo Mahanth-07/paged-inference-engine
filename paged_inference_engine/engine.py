@@ -137,3 +137,24 @@ class LLMEngine:
         if sched.is_empty:
             return rejected
 
+        t0 = time.perf_counter()
+        sampled = self.model_runner.execute_model(sched, self.block_manager)
+        t1 = time.perf_counter()
+
+        for scheduled in sched.prefills:
+            scheduled.seq.num_computed_tokens += scheduled.num_tokens
+            # Publish prefix-cache hashes only now that the KV genuinely exists.
+            self.block_manager.mark_computed_blocks(scheduled.seq)
+        # Only sequences whose prefill COMPLETED this step produce a token.
+        for seq, token_id in sampled.items():
+            seq.append_token(token_id, now=t1)
+
+        outputs = rejected + [self._make_output(seq, finished=False) for seq in sampled]
+
+        finished = self.scheduler.free_finished(self.eos_token_id)
+        self.metrics.record_step(
+            num_batched_tokens=sched.num_batched_tokens,
+            num_prefill_seqs=len(sched.prefills),
+            num_decode_seqs=len(sched.decodes),
+            step_latency=t1 - t0,
+            kv_utilization=self.block_manager.utilization,
