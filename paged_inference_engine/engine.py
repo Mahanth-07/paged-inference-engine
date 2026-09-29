@@ -95,3 +95,24 @@ class LLMEngine:
         if prompt_token_ids is None:
             assert prompt is not None and self.tokenizer is not None, \
                 "pass prompt_token_ids when the runner has no tokenizer"
+            prompt_token_ids = self.tokenizer.encode(prompt)
+        sp = sampling_params or SamplingParams()
+        # Clamp against the cache geometry so a request can never be admitted and then
+        # get stuck: the scheduler's AllocStatus.NEVER path would abort it silently.
+        budget = self.max_model_len - len(prompt_token_ids)
+        if budget <= 0:
+            raise ValueError(
+                f"prompt of {len(prompt_token_ids)} tokens exceeds max_model_len "
+                f"{self.max_model_len}")
+        if sp.max_tokens > budget:
+            sp = SamplingParams(**{**sp.__dict__, "max_tokens": budget})
+        seq = Sequence(
+            prompt_token_ids=list(prompt_token_ids),
+            sampling_params=sp,
+            arrival_time=arrival_time if arrival_time is not None else time.perf_counter(),
+        )
+        self.scheduler.add_seq(seq)
+        return seq.seq_id
+
+    def abort_request(self, seq_id: int) -> None:
+        self.scheduler.abort(seq_id)
