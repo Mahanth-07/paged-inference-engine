@@ -55,3 +55,23 @@ class Detokenizer:
 class LLMEngine:
     def __init__(self, config: EngineConfig, model_runner=None):
         self.config = config
+        self.metrics = MetricsCollector()
+
+        # model_runner is injectable so bench/scheduler_sim.py can pass a fake one and
+        # scheduling policy can be tuned on a laptop with no GPU.
+        if model_runner is None:
+            from .model_runner import ModelRunner
+
+            model_runner = ModelRunner(config)
+        self.model_runner = model_runner
+
+        # profile_num_blocks() both sizes AND allocates the cache -- the two must agree,
+        # so they are deliberately not separate calls the caller can get out of sync.
+        num_blocks = self.model_runner.profile_num_blocks()
+
+        self.block_manager = BlockManager(
+            num_blocks=num_blocks,
+            block_size=config.cache.block_size,
+            enable_prefix_caching=config.cache.enable_prefix_caching,
+        )
+        self.scheduler = Scheduler(config.scheduler, self.block_manager)
