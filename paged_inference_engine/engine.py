@@ -158,3 +158,23 @@ class LLMEngine:
             num_decode_seqs=len(sched.decodes),
             step_latency=t1 - t0,
             kv_utilization=self.block_manager.utilization,
+            num_preempted=len(sched.preempted),
+        )
+        by_id = {o.seq_id: o for o in outputs}
+        for seq in finished:
+            seq.finish_time = t1
+            self.metrics.record_request(seq)
+            out = by_id.get(seq.seq_id)
+            if out is None:
+                out = self._make_output(seq, finished=True)
+                outputs.append(out)
+            out.finished = True
+            out.finish_reason = _finish_reason(seq.status)
+            out.text = self.detokenizer.finish(seq) or out.text
+        return outputs
+
+    def generate(
+        self,
+        prompts: Iterable[str] | None = None,
+        sampling_params: SamplingParams | None = None,
+        prompt_token_ids: Optional[list[list[int]]] = None,
