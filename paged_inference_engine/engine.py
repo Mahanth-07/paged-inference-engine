@@ -116,3 +116,24 @@ class LLMEngine:
 
     def abort_request(self, seq_id: int) -> None:
         self.scheduler.abort(seq_id)
+
+    def has_unfinished_requests(self) -> bool:
+        return self.scheduler.has_unfinished
+
+    def step(self) -> list[RequestOutput]:
+        """One forward pass' worth of work.
+
+        Returns an output for every sequence that produced a token this step, plus a
+        final one for every sequence that finished. Emitting per-step rather than
+        per-request is what makes TTFT and ITL measurable at all.
+        """
+        sched: SchedulerOutput = self.scheduler.schedule()
+
+        # Rejected requests get a real response. Dropping them on the floor makes an
+        # HTTP client hang until it times out, which is a far worse failure than an
+        # error and much harder to debug.
+        rejected = [self._make_output(seq, finished=True)
+                    for seq in self.scheduler.pop_ignored()]
+        if sched.is_empty:
+            return rejected
+
