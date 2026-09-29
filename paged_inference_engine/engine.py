@@ -75,3 +75,23 @@ class LLMEngine:
             enable_prefix_caching=config.cache.enable_prefix_caching,
         )
         self.scheduler = Scheduler(config.scheduler, self.block_manager)
+        self.tokenizer = getattr(model_runner, "tokenizer", None)
+        self.eos_token_id = getattr(self.tokenizer, "eos_token_id", None)
+        self.detokenizer = Detokenizer(self.tokenizer)
+        self.max_model_len = config.model.max_model_len
+
+        if not config.enforce_eager and hasattr(self.model_runner, "capture_cuda_graphs"):
+            self.model_runner.capture_cuda_graphs()
+
+    # ---- public API -------------------------------------------------------
+
+    def add_request(
+        self,
+        prompt: str | None = None,
+        sampling_params: SamplingParams | None = None,
+        prompt_token_ids: Optional[list[int]] = None,
+        arrival_time: Optional[float] = None,
+    ) -> int:
+        if prompt_token_ids is None:
+            assert prompt is not None and self.tokenizer is not None, \
+                "pass prompt_token_ids when the runner has no tokenizer"
