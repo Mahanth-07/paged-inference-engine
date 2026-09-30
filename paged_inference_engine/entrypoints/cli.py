@@ -49,3 +49,23 @@ def cmd_info(args) -> None:
     from ..engine import LLMEngine
 
     engine = LLMEngine(_config(args))
+    mc = engine.config.model
+    bm = engine.block_manager
+    kv_per_token = 2 * mc.num_layers * mc.num_kv_heads * mc.head_dim * 2
+    print(f"model              {mc.model}")
+    print(f"layers/heads/kv    {mc.num_layers} / {mc.num_heads} / {mc.num_kv_heads} "
+          f"(GQA ratio {mc.gqa_ratio})")
+    print(f"head_dim / hidden  {mc.head_dim} / {mc.hidden_size}")
+    print(f"params             {sum(p.numel() for p in engine.model_runner.model.parameters())/1e9:.3f} B")
+    print(f"block size         {bm.block_size} tokens")
+    print(f"blocks             {bm.allocator.num_blocks:,} "
+          f"= {bm.allocator.num_blocks * bm.block_size:,} cached tokens")
+    print(f"KV bytes/token     {kv_per_token:,} (bf16)")
+    print(f"max concurrent     ~{bm.allocator.num_blocks * bm.block_size // max(1, mc.max_model_len)} "
+          f"seqs at max_model_len={mc.max_model_len}")
+
+
+def cmd_throughput(args) -> None:
+    """Offline max-throughput number: submit everything at once, drain, divide.
+
+    This is the number to quote for OFFLINE batch throughput. It is NOT the number to
