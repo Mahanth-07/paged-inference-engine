@@ -199,3 +199,23 @@ class LLMEngine:
 
     def stats(self) -> dict:
         s = self.scheduler.stats()
+        s["num_gpu_blocks"] = self.block_manager.allocator.num_blocks
+        s["num_free_blocks"] = self.block_manager.num_free_blocks
+        if self.block_manager.num_cache_query_blocks:
+            s["prefix_cache_hit_rate"] = (
+                self.block_manager.num_cache_hit_blocks
+                / self.block_manager.num_cache_query_blocks
+            )
+        return s
+
+    # ---- internals --------------------------------------------------------
+
+    def _make_output(self, seq: Sequence, finished: bool) -> RequestOutput:
+        text, delta = self.detokenizer.decode_delta(seq)
+        return RequestOutput(
+            seq_id=seq.seq_id,
+            prompt_token_ids=seq.prompt_token_ids,
+            token_ids=list(seq.output_token_ids),
+            text=text,
+            delta_text=delta,
+            new_token_ids=seq.output_token_ids[-1:],
