@@ -110,3 +110,23 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--max-num-batched-tokens", type=int, default=8192)
         p.add_argument("--max-num-seqs", type=int, default=256)
         p.add_argument("--gpu-memory-utilization", type=float, default=0.90)
+        p.add_argument("--enable-prefix-caching", action="store_true")
+        p.add_argument("--cuda-graphs", action="store_true")
+        return p
+
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    g = common(sub.add_parser("generate"))
+    g.add_argument("--prompt", action="append", required=True)
+    g.add_argument("--max-tokens", type=int, default=128)
+    g.add_argument("--temperature", type=float, default=0.0)
+    g.add_argument("--top-p", type=float, default=1.0)
+    g.add_argument("--top-k", type=int, default=-1)
+    g.set_defaults(func=cmd_generate)
+
+    common(sub.add_parser("info")).set_defaults(func=cmd_info)
+
+    t = common(sub.add_parser("throughput"))
+    t.add_argument("--num-prompts", type=int, default=200)
+    t.add_argument("--input-len", type=int, default=512)
+    t.add_argument("--output-len", type=int, default=128)
