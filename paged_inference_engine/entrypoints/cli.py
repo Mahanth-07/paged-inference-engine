@@ -130,3 +130,15 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--num-prompts", type=int, default=200)
     t.add_argument("--input-len", type=int, default=512)
     t.add_argument("--output-len", type=int, default=128)
+    t.add_argument("--seed", type=int, default=0)
+    t.set_defaults(func=cmd_throughput)
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
