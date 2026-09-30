@@ -90,3 +90,23 @@ def cmd_throughput(args) -> None:
     print(f"requests           {len(outs)}")
     print(f"elapsed            {dt:.2f}s")
     print(f"output throughput  {out_tok/dt:,.1f} tok/s")
+    print(f"total throughput   {(in_tok+out_tok)/dt:,.1f} tok/s")
+    print(f"requests/s         {len(outs)/dt:,.2f}")
+    for k, v in engine.stats().items():
+        print(f"  {k:<22} {v}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="paged-inference-engine")
+
+    def common(p):
+        p.add_argument("--model", default="meta-llama/Llama-3.2-1B-Instruct")
+        p.add_argument("--backend", default="flashinfer",
+                       choices=["naive", "flashinfer", "flash_attn", "triton"])
+        p.add_argument("--dtype", default="bfloat16")
+        p.add_argument("--device", default="cuda")
+        p.add_argument("--block-size", type=int, default=16)
+        p.add_argument("--max-model-len", type=int, default=4096)
+        p.add_argument("--max-num-batched-tokens", type=int, default=8192)
+        p.add_argument("--max-num-seqs", type=int, default=256)
+        p.add_argument("--gpu-memory-utilization", type=float, default=0.90)
