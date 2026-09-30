@@ -219,3 +219,15 @@ class LLMEngine:
             text=text,
             delta_text=delta,
             new_token_ids=seq.output_token_ids[-1:],
+            finished=finished,
+            finish_reason=_finish_reason(seq.status) if finished else None,
+        )
+
+
+def _finish_reason(status: SequenceStatus) -> str:
+    return {
+        SequenceStatus.FINISHED_STOPPED: "stop",
+        SequenceStatus.FINISHED_LENGTH: "length",
+        SequenceStatus.FINISHED_ABORTED: "abort",
+        SequenceStatus.FINISHED_IGNORED: "ignored",
+    }.get(status, "stop")
