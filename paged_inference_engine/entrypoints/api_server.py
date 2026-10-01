@@ -68,3 +68,24 @@ class AsyncEngine:
         """Async generator of RequestOutput deltas for one request."""
         q: asyncio.Queue = asyncio.Queue()
         seq_id = self.engine.add_request(prompt_token_ids=prompt_token_ids,
+                                         sampling_params=params)
+        self.streams[seq_id] = q
+        try:
+            while True:
+                out = await q.get()
+                yield out
+                if out.finished:
+                    return
+        finally:
+            self.streams.pop(seq_id, None)
+
+
+def build_app(engine):
+    from fastapi import FastAPI, HTTPException
+    from fastapi.responses import JSONResponse, StreamingResponse
+
+    from contextlib import asynccontextmanager
+
+    async_engine = AsyncEngine(engine)
+    tokenizer = engine.tokenizer
+
