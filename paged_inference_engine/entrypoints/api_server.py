@@ -27,3 +27,23 @@ from typing import Any, Optional
 from ..config import CacheConfig, EngineConfig, ModelConfig, SchedulerConfig
 from ..sampling import SamplingParams
 
+
+class AsyncEngine:
+    """Wraps the synchronous LLMEngine in a background stepping loop."""
+
+    def __init__(self, engine):
+        self.engine = engine
+        self.streams: dict[int, asyncio.Queue] = {}
+        self._task: Optional[asyncio.Task] = None
+        self._loop_started = asyncio.Event()
+
+    def start(self) -> None:
+        self._task = asyncio.create_task(self._run())
+
+    async def stop(self) -> None:
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
