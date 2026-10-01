@@ -47,3 +47,24 @@ class AsyncEngine:
                 await self._task
             except asyncio.CancelledError:
                 pass
+
+    async def _run(self) -> None:
+        self._loop_started.set()
+        while True:
+            if not self.engine.has_unfinished_requests():
+                # Yield rather than spin. asyncio.sleep(0) alone starves the accept
+                # loop under load; a tiny sleep costs nothing at idle and nothing at
+                # load (we only get here when there is genuinely no work).
+                await asyncio.sleep(0.0005)
+                continue
+            outputs = self.engine.step()
+            for out in outputs:
+                q = self.streams.get(out.seq_id)
+                if q is not None:
+                    q.put_nowait(out)
+            await asyncio.sleep(0)   # let the event loop drain sockets between steps
+
+    async def generate(self, prompt_token_ids: list[int], params: SamplingParams):
+        """Async generator of RequestOutput deltas for one request."""
+        q: asyncio.Queue = asyncio.Queue()
+        seq_id = self.engine.add_request(prompt_token_ids=prompt_token_ids,
