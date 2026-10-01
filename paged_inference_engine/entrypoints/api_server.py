@@ -130,3 +130,24 @@ def build_app(engine):
 
     def _encode(body: dict, chat: bool) -> list[int]:
         if body.get("prompt_token_ids"):
+            return list(body["prompt_token_ids"])
+        if tokenizer is None:
+            raise HTTPException(400, "server has no tokenizer; send prompt_token_ids")
+        if chat:
+            return tokenizer.apply_chat_template(
+                body["messages"], add_generation_prompt=True, tokenize=True)
+        return tokenizer.encode(body["prompt"])
+
+    async def _stream(req_id: str, model: str, prompt_ids: list[int],
+                      params: SamplingParams, chat: bool):
+        created = int(time.time())
+        first = True
+        async for out in async_engine.generate(prompt_ids, params):
+            # Emit the moment a TOKEN exists, not the moment text exists. A token that
+            # only completes half a UTF-8 codepoint still counts for ITL, and buffering
+            # it would flatter both TTFT and ITL.
+            if not out.new_token_ids and not out.finished:
+                continue
+            if chat:
+                delta: dict[str, Any] = {"content": out.delta_text}
+                if first:
