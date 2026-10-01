@@ -172,3 +172,23 @@ def build_app(engine):
         req_id = f"cmpl-{uuid.uuid4().hex[:24]}"
         if body.get("stream"):
             return StreamingResponse(
+                _stream(req_id, model, prompt_ids, params, chat),
+                media_type="text/event-stream",
+            )
+        final = None
+        async for out in async_engine.generate(prompt_ids, params):
+            final = out
+        text = final.text if final else ""
+        choice = ({"index": 0, "message": {"role": "assistant", "content": text},
+                   "finish_reason": final.finish_reason if final else "stop"}
+                  if chat else
+                  {"index": 0, "text": text, "logprobs": None,
+                   "finish_reason": final.finish_reason if final else "stop"})
+        return {
+            "id": req_id,
+            "object": "chat.completion" if chat else "text_completion",
+            "created": int(time.time()), "model": model, "choices": [choice],
+            "usage": {"prompt_tokens": len(prompt_ids),
+                      "completion_tokens": len(final.token_ids) if final else 0,
+                      "total_tokens": len(prompt_ids) + (len(final.token_ids) if final else 0)},
+        }
