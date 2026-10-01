@@ -213,3 +213,24 @@ def config_from_args(args) -> EngineConfig:
         model=ModelConfig(model=args.model, dtype=args.dtype,
                           max_model_len=args.max_model_len, seed=args.seed),
         cache=CacheConfig(block_size=args.block_size,
+                          gpu_memory_utilization=args.gpu_memory_utilization,
+                          num_gpu_blocks=args.num_gpu_blocks,
+                          enable_prefix_caching=args.enable_prefix_caching),
+        scheduler=SchedulerConfig(max_num_batched_tokens=args.max_num_batched_tokens,
+                                  max_num_seqs=args.max_num_seqs,
+                                  enable_chunked_prefill=args.enable_chunked_prefill),
+        attention_backend=args.backend,
+        enforce_eager=args.enforce_eager,
+        device=args.device,
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="meta-llama/Llama-3.2-1B-Instruct")
+    ap.add_argument("--host", default="0.0.0.0")
+    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--backend", default="flashinfer",
+                    choices=["naive", "flashinfer", "flash_attn", "triton"])
+    ap.add_argument("--block-size", type=int, default=16)
+    ap.add_argument("--max-num-batched-tokens", type=int, default=8192)
