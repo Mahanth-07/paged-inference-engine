@@ -110,3 +110,23 @@ def build_app(engine):
         return {"object": "list",
                 "data": [{"id": name, "object": "model", "owned_by": "paged-inference-engine"}]}
 
+    @app.get("/metrics")
+    async def metrics():
+        return JSONResponse({**engine.stats(), **engine.metrics.summary()})
+
+    def _params(body: dict) -> SamplingParams:
+        return SamplingParams(
+            temperature=float(body.get("temperature", 1.0)),
+            top_p=float(body.get("top_p", 1.0)),
+            top_k=int(body.get("top_k", -1)),
+            max_tokens=int(body.get("max_tokens", 128)),
+            min_tokens=int(body.get("min_tokens", 0)),
+            # The benchmark needs this: every system must generate the same token count
+            # or the throughput comparison is meaningless.
+            ignore_eos=bool(body.get("ignore_eos", False)),
+            stop_token_ids=tuple(body.get("stop_token_ids", ()) or ()),
+            seed=body.get("seed"),
+        )
+
+    def _encode(body: dict, chat: bool) -> list[int]:
+        if body.get("prompt_token_ids"):
