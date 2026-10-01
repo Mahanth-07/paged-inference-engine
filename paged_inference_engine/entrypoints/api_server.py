@@ -89,3 +89,24 @@ def build_app(engine):
     async_engine = AsyncEngine(engine)
     tokenizer = engine.tokenizer
 
+    @asynccontextmanager
+    async def lifespan(_app):
+        # The engine loop is a background task for the life of the process. Handlers
+        # only enqueue; if one ever called engine.step() the server would serialise.
+        async_engine.start()
+        yield
+        await async_engine.stop()
+
+    app = FastAPI(title="paged-inference-engine", lifespan=lifespan)
+    app.state.engine = async_engine
+
+    @app.get("/health")
+    async def health():
+        return {"status": "ok"}
+
+    @app.get("/v1/models")
+    async def models():
+        name = engine.config.model.model
+        return {"object": "list",
+                "data": [{"id": name, "object": "model", "owned_by": "paged-inference-engine"}]}
+
