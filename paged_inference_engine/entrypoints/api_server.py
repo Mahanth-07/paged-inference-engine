@@ -192,3 +192,24 @@ def build_app(engine):
                       "completion_tokens": len(final.token_ids) if final else 0,
                       "total_tokens": len(prompt_ids) + (len(final.token_ids) if final else 0)},
         }
+
+    # Body is annotated as a plain `dict` on purpose: with `from __future__ import
+    # annotations` FastAPI resolves annotations against MODULE globals, and a name
+    # imported inside build_app() is not there -- it would silently become a query
+    # parameter and every request would 422.
+    @app.post("/v1/completions")
+    async def completions(body: dict):
+        return await _complete(body, chat=False)
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(body: dict):
+        return await _complete(body, chat=True)
+
+    return app
+
+
+def config_from_args(args) -> EngineConfig:
+    return EngineConfig(
+        model=ModelConfig(model=args.model, dtype=args.dtype,
+                          max_model_len=args.max_model_len, seed=args.seed),
+        cache=CacheConfig(block_size=args.block_size,
