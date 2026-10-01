@@ -151,3 +151,24 @@ def build_app(engine):
             if chat:
                 delta: dict[str, Any] = {"content": out.delta_text}
                 if first:
+                    delta["role"] = "assistant"
+                choice = {"index": 0, "delta": delta,
+                          "finish_reason": out.finish_reason if out.finished else None}
+                obj = "chat.completion.chunk"
+            else:
+                choice = {"index": 0, "text": out.delta_text, "logprobs": None,
+                          "finish_reason": out.finish_reason if out.finished else None}
+                obj = "text_completion"
+            first = False
+            payload = {"id": req_id, "object": obj, "created": created,
+                       "model": model, "choices": [choice]}
+            yield f"data: {json.dumps(payload)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    async def _complete(body: dict, chat: bool):
+        model = body.get("model", engine.config.model.model)
+        prompt_ids = _encode(body, chat)
+        params = _params(body)
+        req_id = f"cmpl-{uuid.uuid4().hex[:24]}"
+        if body.get("stream"):
+            return StreamingResponse(
