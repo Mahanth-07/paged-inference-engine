@@ -255,3 +255,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main():
     import uvicorn
+
+    from ..engine import LLMEngine
+
+    args = build_parser().parse_args()
+    engine = LLMEngine(config_from_args(args))
+    app = build_app(engine)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning",
+                access_log=False)
+
+
+if __name__ == "__main__":
+    main()
