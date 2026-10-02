@@ -234,3 +234,24 @@ def build_parser() -> argparse.ArgumentParser:
                     choices=["naive", "flashinfer", "flash_attn", "triton"])
     ap.add_argument("--block-size", type=int, default=16)
     ap.add_argument("--max-num-batched-tokens", type=int, default=8192)
+    ap.add_argument("--max-num-seqs", type=int, default=256)
+    ap.add_argument("--max-model-len", type=int, default=4096)
+    ap.add_argument("--gpu-memory-utilization", type=float, default=0.90)
+    ap.add_argument("--num-gpu-blocks", type=int, default=None,
+                    help="Pin the block count so benchmark runs are deterministic.")
+    ap.add_argument("--dtype", default="bfloat16")
+    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--enable-chunked-prefill", action="store_true", default=True)
+    ap.add_argument("--no-chunked-prefill", dest="enable_chunked_prefill",
+                    action="store_false")
+    ap.add_argument("--enable-prefix-caching", action="store_true")
+    ap.add_argument("--enforce-eager", action="store_true", default=True,
+                    help="Disable CUDA graph capture. Use for the M5 ablation.")
+    ap.add_argument("--cuda-graphs", dest="enforce_eager", action="store_false",
+                    help="Enable CUDA graph capture for the decode path.")
+    return ap
+
+
+def main():
+    import uvicorn
