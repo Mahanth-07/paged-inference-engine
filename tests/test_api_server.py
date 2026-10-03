@@ -88,3 +88,24 @@ def test_greedy_is_deterministic_across_requests(client):
     body = {"prompt_token_ids": [11, 12, 13, 14], "max_tokens": 8,
             "temperature": 0, "ignore_eos": True}
     a = client.post("/v1/completions", json=body).json()["choices"][0]["text"]
+    b = client.post("/v1/completions", json=body).json()["choices"][0]["text"]
+    assert a == b
+
+
+def test_concurrent_requests_are_batched_not_serialised(client):
+    """Fire several requests at once and check the engine actually ran them together.
+
+    mean_batch_size > 1 is the observable difference between continuous batching and
+    a server that has accidentally serialised itself in the request handler.
+    """
+    import concurrent.futures as cf
+
+    def body(i):
+        return {"prompt_token_ids": [i, i + 1, i + 2, i + 3], "max_tokens": 24,
+                "temperature": 0, "ignore_eos": True}
+
+    with cf.ThreadPoolExecutor(max_workers=6) as ex:
+        results = list(ex.map(
+            lambda i: client.post("/v1/completions", json=body(i)).status_code, range(6)))
+    assert results == [200] * 6
+    assert client.get("/metrics").json()["mean_batch_size"] > 1.0
