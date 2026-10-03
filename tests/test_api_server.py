@@ -27,3 +27,23 @@ def client():
                           hidden_size=128, num_layers=2, num_heads=4, num_kv_heads=2,
                           head_dim=32, intermediate_size=256, vocab_size=1000),
         cache=CacheConfig(block_size=16, num_gpu_blocks=256),
+        scheduler=SchedulerConfig(max_num_batched_tokens=128, max_num_seqs=8),
+        attention_backend="naive", device="cpu",
+    )
+    with TestClient(build_app(LLMEngine(cfg))) as c:
+        yield c
+
+
+def sse_chunks(text):
+    out = []
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block.startswith("data:"):
+            continue
+        payload = block[5:].strip()
+        if payload == "[DONE]":
+            out.append(None)
+        else:
+            out.append(json.loads(payload))
+    return out
+
