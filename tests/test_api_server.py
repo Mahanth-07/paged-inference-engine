@@ -67,3 +67,24 @@ def test_streaming_emits_one_chunk_per_token(client):
     """If the server buffers, TTFT and ITL are measuring the wrong thing entirely."""
     r = client.post("/v1/completions", json={
         "prompt_token_ids": [5, 6, 7, 8, 9], "max_tokens": 6,
+        "temperature": 0, "ignore_eos": True, "stream": True})
+    chunks = sse_chunks(r.text)
+    assert chunks[-1] is None, "stream did not terminate with [DONE]"
+    data = [c for c in chunks if c]
+    assert len(data) == 6, f"expected 6 token chunks, got {len(data)}"
+    assert data[-1]["choices"][0]["finish_reason"] == "length"
+    assert all(c["choices"][0]["finish_reason"] is None for c in data[:-1])
+
+
+def test_chat_completions_shape(client):
+    r = client.post("/v1/chat/completions", json={
+        "prompt_token_ids": [1, 2, 3], "max_tokens": 4,
+        "temperature": 0, "ignore_eos": True})
+    msg = r.json()["choices"][0]["message"]
+    assert msg["role"] == "assistant"
+
+
+def test_greedy_is_deterministic_across_requests(client):
+    body = {"prompt_token_ids": [11, 12, 13, 14], "max_tokens": 8,
+            "temperature": 0, "ignore_eos": True}
+    a = client.post("/v1/completions", json=body).json()["choices"][0]["text"]
