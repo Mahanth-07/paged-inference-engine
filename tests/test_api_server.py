@@ -47,3 +47,23 @@ def sse_chunks(text):
             out.append(json.loads(payload))
     return out
 
+
+def test_health_and_models(client):
+    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/v1/models").json()["data"][0]["object"] == "model"
+
+
+def test_completion_generates_exactly_max_tokens(client):
+    r = client.post("/v1/completions", json={
+        "prompt_token_ids": [5, 6, 7, 8, 9], "max_tokens": 7,
+        "temperature": 0, "ignore_eos": True})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["usage"]["completion_tokens"] == 7
+    assert body["choices"][0]["finish_reason"] == "length"
+
+
+def test_streaming_emits_one_chunk_per_token(client):
+    """If the server buffers, TTFT and ITL are measuring the wrong thing entirely."""
+    r = client.post("/v1/completions", json={
+        "prompt_token_ids": [5, 6, 7, 8, 9], "max_tokens": 6,
