@@ -7,3 +7,24 @@ scatter launches per decode step, against a step that is only a few milliseconds
 The fused version writes K and V in a single kernel with one pass over the slots.
 
 Microbenchmark both: `python -m bench.microbench_kernels --op reshape_and_cache`.
+"""
+
+from __future__ import annotations
+
+import os
+
+import torch
+
+try:
+    import triton
+    import triton.language as tl
+
+    HAS_TRITON = True
+except ImportError:
+    HAS_TRITON = False
+    triton = None
+    tl = None
+
+_DISABLE = os.environ.get("PAGED_INFERENCE_ENGINE_DISABLE_TRITON", "0") == "1"
+
+
