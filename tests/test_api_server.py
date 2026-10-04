@@ -109,3 +109,15 @@ def test_concurrent_requests_are_batched_not_serialised(client):
             lambda i: client.post("/v1/completions", json=body(i)).status_code, range(6)))
     assert results == [200] * 6
     assert client.get("/metrics").json()["mean_batch_size"] > 1.0
+
+
+def test_metrics_endpoint_reports_the_standard_fields(client):
+    m = client.get("/metrics").json()
+    for key in ("p99_ttft_ms", "median_tpot_ms", "p99_itl_ms",
+                "output_throughput_tok_s", "kv_cache_utilization", "num_gpu_blocks"):
+        assert key in m, f"missing {key}"
+
+
+def test_bad_request_without_tokenizer_is_a_400(client):
+    r = client.post("/v1/completions", json={"prompt": "text", "max_tokens": 4})
+    assert r.status_code == 400
