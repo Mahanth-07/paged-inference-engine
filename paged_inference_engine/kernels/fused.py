@@ -27,3 +27,23 @@ except ImportError:  # laptop, or any non-CUDA box
     tl = None
 
 _DISABLE = os.environ.get("PAGED_INFERENCE_ENGINE_DISABLE_TRITON", "0") == "1"
+
+
+def _use_triton(x: torch.Tensor) -> bool:
+    return HAS_TRITON and not _DISABLE and x.is_cuda
+
+
+# ---------------------------------------------------------------------------
+# RMSNorm
+# ---------------------------------------------------------------------------
+
+
+def rms_norm_torch(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
+    dtype = x.dtype
+    x32 = x.float()
+    var = x32.pow(2).mean(-1, keepdim=True)
+    return (x32 * torch.rsqrt(var + eps)).to(dtype) * weight
+
+
+def fused_add_rms_norm_torch(x, residual, weight, eps):
+    residual = residual + x
