@@ -88,3 +88,24 @@ if HAS_TRITON:
         w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
         tl.store(out_ptr + row * n_cols + cols, (r * rstd) * w, mask=mask)
 
+
+def rms_norm(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
+    if not _use_triton(x):
+        return rms_norm_torch(x, weight, eps)
+    x2 = x.contiguous().view(-1, x.shape[-1])
+    n_cols = x2.shape[-1]
+    out = torch.empty_like(x2)
+    _rms_norm_kernel[(x2.shape[0],)](
+        out, x2, weight, eps, n_cols, BLOCK=triton.next_power_of_2(n_cols), num_warps=8
+    )
+    return out.view(x.shape)
+
+
+def fused_add_rms_norm(x, residual, weight, eps):
+    if not _use_triton(x):
+        return fused_add_rms_norm_torch(x, residual, weight, eps)
+    x2 = x.contiguous().view(-1, x.shape[-1])
+    res2 = residual.contiguous().view(-1, x.shape[-1])
+    n_cols = x2.shape[-1]
+    out = torch.empty_like(x2)
+    _fused_add_rms_norm_kernel[(x2.shape[0],)](
