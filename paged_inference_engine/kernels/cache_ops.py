@@ -28,3 +28,24 @@ except ImportError:
 _DISABLE = os.environ.get("PAGED_INFERENCE_ENGINE_DISABLE_TRITON", "0") == "1"
 
 
+def use_triton_cache_op(x: torch.Tensor) -> bool:
+    return HAS_TRITON and not _DISABLE and x.is_cuda
+
+
+if HAS_TRITON:
+
+    @triton.jit
+    def _reshape_and_cache_kernel(
+        k_ptr, v_ptr, k_cache_ptr, v_cache_ptr, slot_ptr,
+        stride_kt, stride_kh,
+        stride_ct, stride_ch,
+        num_kv_heads,
+        HEAD_DIM: tl.constexpr,
+        HEADS_PER_BLOCK: tl.constexpr,
+    ):
+        """One program per token; writes all KV heads for that token, K and V together.
+
+        A slot of -1 means "do not write" -- that is how CUDA-graph padding rows are
+        neutralised without a host-side branch (see ModelRunner.capture_cuda_graphs).
+        """
+        tok = tl.program_id(0)
