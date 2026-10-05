@@ -68,3 +68,23 @@ if HAS_TRITON:
 
     @triton.jit
     def _fused_add_rms_norm_kernel(
+        out_ptr, x_ptr, res_ptr, w_ptr, eps, n_cols,
+        BLOCK: tl.constexpr,
+    ):
+        """Adds the residual, writes it back, and normalises -- one pass, one launch.
+
+        Writing the updated residual in place is what lets the next layer read it
+        without another kernel; that in-place write is the whole point of the fusion.
+        """
+        row = tl.program_id(0)
+        cols = tl.arange(0, BLOCK)
+        mask = cols < n_cols
+        x = tl.load(x_ptr + row * n_cols + cols, mask=mask, other=0.0).to(tl.float32)
+        r = tl.load(res_ptr + row * n_cols + cols, mask=mask, other=0.0).to(tl.float32)
+        r = r + x
+        tl.store(res_ptr + row * n_cols + cols, r, mask=mask)
+        var = tl.sum(r * r, axis=0) / n_cols
+        rstd = 1.0 / tl.sqrt(var + eps)
+        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        tl.store(out_ptr + row * n_cols + cols, (r * rstd) * w, mask=mask)
+
