@@ -47,3 +47,24 @@ def rms_norm_torch(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.T
 
 def fused_add_rms_norm_torch(x, residual, weight, eps):
     residual = residual + x
+    return rms_norm_torch(residual, weight, eps), residual
+
+
+if HAS_TRITON:
+
+    @triton.jit
+    def _rms_norm_kernel(
+        out_ptr, x_ptr, w_ptr, eps, n_cols,
+        BLOCK: tl.constexpr,
+    ):
+        row = tl.program_id(0)
+        cols = tl.arange(0, BLOCK)
+        mask = cols < n_cols
+        x = tl.load(x_ptr + row * n_cols + cols, mask=mask, other=0.0).to(tl.float32)
+        var = tl.sum(x * x, axis=0) / n_cols
+        rstd = 1.0 / tl.sqrt(var + eps)
+        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        tl.store(out_ptr + row * n_cols + cols, (x * rstd) * w, mask=mask)
+
+    @triton.jit
+    def _fused_add_rms_norm_kernel(
