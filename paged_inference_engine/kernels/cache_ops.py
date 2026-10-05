@@ -70,3 +70,15 @@ def reshape_and_cache_triton(key, value, k_cache, v_cache, slot_mapping) -> None
     num_tokens, num_kv_heads, head_dim = key.shape
     if num_tokens == 0:
         return
+    # k_cache: (num_blocks, block_size, num_kv_heads, head_dim) -> flatten the first two
+    kc = k_cache.view(-1, num_kv_heads, head_dim)
+    vc = v_cache.view(-1, num_kv_heads, head_dim)
+    _reshape_and_cache_kernel[(num_tokens,)](
+        key, value, kc, vc, slot_mapping,
+        key.stride(0), key.stride(1),
+        kc.stride(0), kc.stride(1),
+        num_kv_heads,
+        HEAD_DIM=head_dim,
+        HEADS_PER_BLOCK=min(triton.next_power_of_2(num_kv_heads), 8),
+        num_warps=4,
+    )
