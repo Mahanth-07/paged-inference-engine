@@ -49,3 +49,24 @@ if HAS_TRITON:
         neutralised without a host-side branch (see ModelRunner.capture_cuda_graphs).
         """
         tok = tl.program_id(0)
+        slot = tl.load(slot_ptr + tok)
+        if slot < 0:
+            return
+
+        d = tl.arange(0, HEAD_DIM)
+        for h_start in range(0, num_kv_heads, HEADS_PER_BLOCK):
+            h = h_start + tl.arange(0, HEADS_PER_BLOCK)
+            h_mask = h < num_kv_heads
+            src = tok * stride_kt + h[:, None] * stride_kh + d[None, :]
+            dst = slot * stride_ct + h[:, None] * stride_ch + d[None, :]
+            mask = h_mask[:, None]
+            k = tl.load(k_ptr + src, mask=mask, other=0.0)
+            v = tl.load(v_ptr + src, mask=mask, other=0.0)
+            tl.store(k_cache_ptr + dst, k, mask=mask)
+            tl.store(v_cache_ptr + dst, v, mask=mask)
+
+
+def reshape_and_cache_triton(key, value, k_cache, v_cache, slot_mapping) -> None:
+    num_tokens, num_kv_heads, head_dim = key.shape
+    if num_tokens == 0:
+        return
