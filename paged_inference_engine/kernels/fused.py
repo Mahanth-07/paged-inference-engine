@@ -130,3 +130,24 @@ if HAS_TRITON:
     @triton.jit
     def _silu_and_mul_kernel(out_ptr, x_ptr, d, BLOCK: tl.constexpr):
         row = tl.program_id(0)
+        for start in range(0, d, BLOCK):
+            cols = start + tl.arange(0, BLOCK)
+            mask = cols < d
+            g = tl.load(x_ptr + row * 2 * d + cols, mask=mask, other=0.0).to(tl.float32)
+            u = tl.load(x_ptr + row * 2 * d + d + cols, mask=mask, other=0.0).to(tl.float32)
+            silu = g / (1.0 + tl.exp(-g))
+            tl.store(out_ptr + row * d + cols, silu * u, mask=mask)
+
+
+def silu_and_mul(gate_up: torch.Tensor) -> torch.Tensor:
+    """SwiGLU. torch needs a chunk (a view + two reads) plus silu plus mul: 3 kernels
+    and 3 passes. The fused version is one pass over 2*d and one write of d."""
+    if not _use_triton(gate_up):
+        return silu_and_mul_torch(gate_up)
+    x = gate_up.contiguous().view(-1, gate_up.shape[-1])
+    d = x.shape[-1] // 2
+    out = torch.empty(x.shape[0], d, dtype=gate_up.dtype, device=gate_up.device)
+    _silu_and_mul_kernel[(x.shape[0],)](out, x, d, BLOCK=1024, num_warps=4)
+    return out.view(*gate_up.shape[:-1], d)
+
+
