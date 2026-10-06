@@ -172,3 +172,24 @@ def apply_rope_torch(query, key, cos, sin):
 
 if HAS_TRITON:
 
+    @triton.jit
+    def _rope_kernel(
+        q_ptr, k_ptr, cos_ptr, sin_ptr,
+        num_q_heads, num_k_heads, head_dim, half_dim,
+        BLOCK: tl.constexpr,
+    ):
+        """One program per (token, head) over q and k together, in place.
+
+        In place matters: q and k are freshly produced by the qkv GEMM and immediately
+        consumed by attention, so there is no reason to round-trip another buffer.
+        """
+        tok = tl.program_id(0)
+        head = tl.program_id(1)
+        cols = tl.arange(0, BLOCK)
+        mask = cols < half_dim
+        c = tl.load(cos_ptr + tok * half_dim + cols, mask=mask, other=0.0).to(tl.float32)
+        s = tl.load(sin_ptr + tok * half_dim + cols, mask=mask, other=0.0).to(tl.float32)
+
+        if head < num_q_heads:
+            base = q_ptr + tok * num_q_heads * head_dim + head * head_dim
+            x1 = tl.load(base + cols, mask=mask, other=0.0).to(tl.float32)
