@@ -151,3 +151,24 @@ def silu_and_mul(gate_up: torch.Tensor) -> torch.Tensor:
     return out.view(*gate_up.shape[:-1], d)
 
 
+# ---------------------------------------------------------------------------
+# RoPE
+# ---------------------------------------------------------------------------
+
+
+def apply_rope_torch(query, key, cos, sin):
+    """NeoX-style half rotation, which is what Llama uses.
+
+    query: (num_tokens, num_heads, head_dim); cos/sin: (num_tokens, head_dim/2).
+    """
+    def rotate(x):
+        x1, x2 = x.chunk(2, dim=-1)
+        c = cos.unsqueeze(1).to(x.dtype)
+        s = sin.unsqueeze(1).to(x.dtype)
+        return torch.cat((x1 * c - x2 * s, x2 * c + x1 * s), dim=-1)
+
+    return rotate(query), rotate(key)
+
+
+if HAS_TRITON:
+
