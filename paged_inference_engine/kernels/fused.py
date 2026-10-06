@@ -109,3 +109,24 @@ def fused_add_rms_norm(x, residual, weight, eps):
     n_cols = x2.shape[-1]
     out = torch.empty_like(x2)
     _fused_add_rms_norm_kernel[(x2.shape[0],)](
+        out, x2, res2, weight, eps, n_cols,
+        BLOCK=triton.next_power_of_2(n_cols), num_warps=8,
+    )
+    return out.view(x.shape), res2.view(residual.shape)
+
+
+# ---------------------------------------------------------------------------
+# SwiGLU
+# ---------------------------------------------------------------------------
+
+
+def silu_and_mul_torch(gate_up: torch.Tensor) -> torch.Tensor:
+    gate, up = gate_up.chunk(2, dim=-1)
+    return torch.nn.functional.silu(gate) * up
+
+
+if HAS_TRITON:
+
+    @triton.jit
+    def _silu_and_mul_kernel(out_ptr, x_ptr, d, BLOCK: tl.constexpr):
+        row = tl.program_id(0)
