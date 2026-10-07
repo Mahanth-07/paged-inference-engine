@@ -56,3 +56,23 @@ def test_rope_is_a_rotation():
     a2, b2 = q2.chunk(2, dim=-1)
     torch.testing.assert_close((a ** 2 + b ** 2), (a2 ** 2 + b2 ** 2), atol=1e-5, rtol=1e-5)
 
+
+def test_rope_at_position_zero_is_identity():
+    q, k = torch.randn(2, 2, 8), torch.randn(2, 1, 8)
+    zeros = torch.zeros(2, 4)
+    q2, k2 = fused.apply_rope_torch(q, k, torch.ones_like(zeros), zeros)
+    torch.testing.assert_close(q2, q)
+    torch.testing.assert_close(k2, k)
+
+
+def test_llama3_rope_scaling_leaves_short_wavelengths_alone():
+    """The Llama 3.1/3.2 rescale only touches long wavelengths. If it changed the high
+    frequencies too, short-context output would break -- and that would be obvious.
+    The dangerous direction is the opposite: silently not applying it at all."""
+    from paged_inference_engine.models.llama import _llama3_scaled_inv_freq
+
+    inv = 1.0 / (500000.0 ** (torch.arange(0, 64, 2, dtype=torch.float32) / 64))
+    scaled = _llama3_scaled_inv_freq(inv, 32.0, 1.0, 4.0, 8192)
+    assert torch.allclose(scaled[0], inv[0]), "high frequency was rescaled"
+    assert scaled[-1] < inv[-1], "low frequency was NOT rescaled"
+
