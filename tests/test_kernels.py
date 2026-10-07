@@ -35,3 +35,24 @@ def test_fused_add_rms_norm_matches_unfused():
     x, res, w = torch.randn(4, 32), torch.randn(4, 32), torch.randn(32)
     out, new_res = fused.fused_add_rms_norm_torch(x, res.clone(), w, 1e-6)
     torch.testing.assert_close(new_res, res + x)
+    torch.testing.assert_close(out, fused.rms_norm_torch(res + x, w, 1e-6))
+
+
+def test_silu_and_mul_matches_unfused():
+    gate_up = torch.randn(6, 64)
+    gate, up = gate_up.chunk(2, dim=-1)
+    torch.testing.assert_close(fused.silu_and_mul_torch(gate_up),
+                               torch.nn.functional.silu(gate) * up)
+
+
+def test_rope_is_a_rotation():
+    """RoPE preserves the norm of each half-pair; if it doesn't, the cos/sin pairing
+    is wrong (a classic: interleaved vs half-split layout)."""
+    q = torch.randn(3, 2, 8)
+    k = torch.randn(3, 1, 8)
+    ang = torch.randn(3, 4)
+    q2, _ = fused.apply_rope_torch(q, k, ang.cos(), ang.sin())
+    a, b = q.chunk(2, dim=-1)
+    a2, b2 = q2.chunk(2, dim=-1)
+    torch.testing.assert_close((a ** 2 + b ** 2), (a2 ** 2 + b2 ** 2), atol=1e-5, rtol=1e-5)
+
