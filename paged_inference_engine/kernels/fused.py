@@ -193,3 +193,24 @@ if HAS_TRITON:
         if head < num_q_heads:
             base = q_ptr + tok * num_q_heads * head_dim + head * head_dim
             x1 = tl.load(base + cols, mask=mask, other=0.0).to(tl.float32)
+            x2 = tl.load(base + half_dim + cols, mask=mask, other=0.0).to(tl.float32)
+            tl.store(base + cols, x1 * c - x2 * s, mask=mask)
+            tl.store(base + half_dim + cols, x2 * c + x1 * s, mask=mask)
+        if head < num_k_heads:
+            base = k_ptr + tok * num_k_heads * head_dim + head * head_dim
+            x1 = tl.load(base + cols, mask=mask, other=0.0).to(tl.float32)
+            x2 = tl.load(base + half_dim + cols, mask=mask, other=0.0).to(tl.float32)
+            tl.store(base + cols, x1 * c - x2 * s, mask=mask)
+            tl.store(base + half_dim + cols, x2 * c + x1 * s, mask=mask)
+
+
+def apply_rope(query, key, cos, sin):
+    if not _use_triton(query):
+        return apply_rope_torch(query, key, cos, sin)
+    q = query.contiguous()
+    k = key.contiguous()
+    num_tokens, num_q_heads, head_dim = q.shape
+    num_k_heads = k.shape[1]
+    half = head_dim // 2
+    _rope_kernel[(num_tokens, max(num_q_heads, num_k_heads))](
+        q, k, cos.contiguous(), sin.contiguous(),
