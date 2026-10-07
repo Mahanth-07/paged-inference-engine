@@ -214,3 +214,7 @@ def apply_rope(query, key, cos, sin):
     half = head_dim // 2
     _rope_kernel[(num_tokens, max(num_q_heads, num_k_heads))](
         q, k, cos.contiguous(), sin.contiguous(),
+        num_q_heads, num_k_heads, head_dim, half,
+        BLOCK=triton.next_power_of_2(half), num_warps=4,
+    )
+    return q, k
