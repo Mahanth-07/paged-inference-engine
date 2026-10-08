@@ -96,3 +96,21 @@ def test_triton_fused_add_rms_norm_matches_torch():
     torch.testing.assert_close(r1, r2, atol=2e-2, rtol=2e-2)
     torch.testing.assert_close(o1, o2, atol=2e-2, rtol=2e-2)
 
+
+@CUDA
+def test_triton_silu_and_mul_matches_torch():
+    x = torch.randn(13, 8192, dtype=torch.bfloat16, device="cuda")
+    torch.testing.assert_close(fused.silu_and_mul(x), fused.silu_and_mul_torch(x),
+                               atol=2e-2, rtol=2e-2)
+
+
+@CUDA
+def test_triton_rope_matches_torch():
+    q = torch.randn(11, 32, 64, dtype=torch.bfloat16, device="cuda")
+    k = torch.randn(11, 8, 64, dtype=torch.bfloat16, device="cuda")
+    ang = torch.randn(11, 32, device="cuda")
+    cos, sin = ang.cos().to(torch.bfloat16), ang.sin().to(torch.bfloat16)
+    wq, wk = fused.apply_rope_torch(q, k, cos, sin)
+    gq, gk = fused.apply_rope(q.clone(), k.clone(), cos, sin)
+    torch.testing.assert_close(gq, wq, atol=2e-2, rtol=2e-2)
+    torch.testing.assert_close(gk, wk, atol=2e-2, rtol=2e-2)
