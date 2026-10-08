@@ -76,3 +76,23 @@ def test_llama3_rope_scaling_leaves_short_wavelengths_alone():
     assert torch.allclose(scaled[0], inv[0]), "high frequency was rescaled"
     assert scaled[-1] < inv[-1], "low frequency was NOT rescaled"
 
+
+@CUDA
+@pytest.mark.parametrize("hidden", [128, 2048, 3072])
+def test_triton_rms_norm_matches_torch(hidden):
+    x = torch.randn(17, hidden, dtype=torch.bfloat16, device="cuda")
+    w = torch.randn(hidden, dtype=torch.bfloat16, device="cuda")
+    torch.testing.assert_close(fused.rms_norm(x, w, 1e-6),
+                               fused.rms_norm_torch(x, w, 1e-6), atol=2e-2, rtol=2e-2)
+
+
+@CUDA
+def test_triton_fused_add_rms_norm_matches_torch():
+    x = torch.randn(9, 2048, dtype=torch.bfloat16, device="cuda")
+    res = torch.randn_like(x)
+    w = torch.randn(2048, dtype=torch.bfloat16, device="cuda")
+    o1, r1 = fused.fused_add_rms_norm(x, res.clone(), w, 1e-6)
+    o2, r2 = fused.fused_add_rms_norm_torch(x, res.clone(), w, 1e-6)
+    torch.testing.assert_close(r1, r2, atol=2e-2, rtol=2e-2)
+    torch.testing.assert_close(o1, o2, atol=2e-2, rtol=2e-2)
+
