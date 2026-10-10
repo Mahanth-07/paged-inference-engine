@@ -163,3 +163,24 @@ if HAS_TRITON:
     def _paged_attn_decode_kernel(
         out_ptr,             # (num_seqs, num_heads, head_dim)
         q_ptr,               # (num_seqs, num_heads, head_dim)
+        k_cache_ptr,         # (num_blocks, block_size, num_kv_heads, head_dim)
+        v_cache_ptr,
+        block_tables_ptr,    # (num_seqs, max_num_pages) int32
+        context_lens_ptr,    # (num_seqs,) int32
+        scale,
+        stride_os, stride_oh,
+        stride_qs, stride_qh,
+        stride_kb, stride_kt, stride_kh,
+        stride_bts,
+        HEAD_DIM: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+        TILE_KV: tl.constexpr,
+        GQA_RATIO: tl.constexpr,
+        PAD_GQA: tl.constexpr,
+    ):
+        seq = tl.program_id(0)
+        kv_head = tl.program_id(1)
+
+        ctx_len = tl.load(context_lens_ptr + seq)
+        if ctx_len <= 0:
+            return
