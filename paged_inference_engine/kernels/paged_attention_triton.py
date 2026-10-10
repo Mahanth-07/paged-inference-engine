@@ -102,3 +102,24 @@ def reference_paged_attention_decode(query, k_cache, v_cache, block_tables,
         ctx = int(context_lens[i])
         nb = (ctx + block_size - 1) // block_size
         blocks = block_tables[i, :nb]
+        k = k_cache[blocks].reshape(-1, num_kv_heads, head_dim)[:ctx]
+        v = v_cache[blocks].reshape(-1, num_kv_heads, head_dim)[:ctx]
+        if ratio > 1:
+            k = k.repeat_interleave(ratio, dim=1)
+            v = v.repeat_interleave(ratio, dim=1)
+        q = query[i].unsqueeze(1)                                # (H, 1, D)
+        logits = (q.float() @ k.transpose(0, 1).float().transpose(1, 2)) * scale
+        probs = logits.softmax(-1)
+        out[i] = (probs @ v.transpose(0, 1).float()).squeeze(1).to(query.dtype)
+    return out
+
+
+def reference_paged_attention_prefill(query, k_cache, v_cache, block_tables,
+                                      context_lens, query_lens, scale):
+    """Pure-PyTorch paged prefill with bottom-right causal alignment.
+
+    Bottom-right alignment is the chunked-prefill detail: a chunk's queries occupy
+    absolute positions ctx - q_len .. ctx - 1, so query j may attend to key p iff
+    p <= ctx - q_len + j. Top-left alignment (the naive `is_causal=True`) is wrong
+    for every chunk after the first.
+    """
