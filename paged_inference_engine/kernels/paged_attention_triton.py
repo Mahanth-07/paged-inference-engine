@@ -62,3 +62,23 @@ except ImportError:  # laptop
         constexpr = object
 
     tl = _TL()
+
+_DISABLE = os.environ.get("PAGED_INFERENCE_ENGINE_DISABLE_TRITON", "0") == "1"
+
+# Minimum tl.dot tile. Query rows are padded up to this even when GQA_RATIO is 1;
+# the wasted FLOPs are free because the kernel is bandwidth-bound anyway.
+MIN_DOT = 16
+
+
+def _pick_tile_kv(block_size: int, target: int = 64) -> int:
+    """Gather several pages per tile so loads coalesce and tl.dot stays legal.
+
+    Must be an exact multiple of block_size (the tile indexes pages by integer
+    division) and at least MIN_DOT wide (tl.dot rejects a dimension under 16, which is
+    what would otherwise rule out block_size=8).
+    """
+    pages = max(1, -(-target // block_size))     # ceil
+    return pages * block_size
+
+
+# ===========================================================================
