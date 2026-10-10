@@ -41,3 +41,24 @@ Correctness gotchas, all of them in tests/test_paged_attention.py:
 """
 
 from __future__ import annotations
+
+import math
+import os
+from typing import Optional
+
+import torch
+import torch.nn.functional as F
+
+try:
+    import triton
+    import triton.language as tl
+
+    HAS_TRITON = True
+except ImportError:  # laptop
+    HAS_TRITON = False
+    triton = None
+
+    class _TL:  # so the @triton.jit block below can be skipped cleanly
+        constexpr = object
+
+    tl = _TL()
