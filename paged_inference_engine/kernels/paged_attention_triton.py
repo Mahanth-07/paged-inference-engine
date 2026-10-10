@@ -184,3 +184,24 @@ if HAS_TRITON:
         ctx_len = tl.load(context_lens_ptr + seq)
         if ctx_len <= 0:
             return
+
+        rows = tl.arange(0, PAD_GQA)
+        row_mask = rows < GQA_RATIO
+        d = tl.arange(0, HEAD_DIM)
+
+        # The GQA_RATIO query heads sharing this KV head, loaded once.
+        q_off = seq * stride_qs + (kv_head * GQA_RATIO + rows)[:, None] * stride_qh + d[None, :]
+        q = tl.load(q_ptr + q_off, mask=row_mask[:, None], other=0.0)
+
+        m_i = tl.full([PAD_GQA], float("-inf"), dtype=tl.float32)
+        l_i = tl.zeros([PAD_GQA], dtype=tl.float32)
+        acc = tl.zeros([PAD_GQA, HEAD_DIM], dtype=tl.float32)
+
+        tile_idx = tl.arange(0, TILE_KV)
+        page_of = tile_idx // BLOCK_SIZE
+        slot_of = tile_idx % BLOCK_SIZE
+
+        num_tiles = tl.cdiv(ctx_len, TILE_KV)
+        for t in range(0, num_tiles):
+            tok = t * TILE_KV + tile_idx
+            valid = tok < ctx_len
