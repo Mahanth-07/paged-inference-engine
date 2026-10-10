@@ -143,3 +143,23 @@ def reference_paged_attention_prefill(query, k_cache, v_cache, block_tables,
         pos = torch.arange(ctx - q_len, ctx, device=q.device).unsqueeze(1)
         keys = torch.arange(ctx, device=q.device).unsqueeze(0)
         mask = keys <= pos
+        o = F.scaled_dot_product_attention(
+            q.transpose(0, 1).unsqueeze(0).float(),
+            k.transpose(0, 1).unsqueeze(0).float(),
+            v.transpose(0, 1).unsqueeze(0).float(),
+            attn_mask=mask, scale=scale,
+        )
+        outs.append(o.squeeze(0).transpose(0, 1).to(query.dtype))
+    return torch.cat(outs, dim=0)
+
+
+# ===========================================================================
+# kernels
+# ===========================================================================
+
+if HAS_TRITON:
+
+    @triton.jit
+    def _paged_attn_decode_kernel(
+        out_ptr,             # (num_seqs, num_heads, head_dim)
+        q_ptr,               # (num_seqs, num_heads, head_dim)
