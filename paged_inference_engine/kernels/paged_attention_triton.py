@@ -20,3 +20,24 @@ Three kernels here:
                                       KV traffic is the whole cost.
   2. _paged_attn_decode_split_kernel  flash-decoding: split the sequence's KV across
      + _combine_kernel                SPLIT_K programs, each producing a partial
+                                      (acc, m, l), then merge. At batch 1 the v1 grid
+                                      is (1, num_kv_heads) = 8 programs on a 108-SM
+                                      GPU -- 93% of the machine idle. This fixes that,
+                                      and it is why long-context low-batch decode is
+                                      fast at all.
+  3. _paged_prefill_kernel            FlashAttention-2 forward whose K/V comes through
+                                      the block table, with bottom-right causal
+                                      alignment so chunked prefill is correct.
+
+The KV tile is decoupled from the page size: a tile gathers `TILE_KV // block_size`
+pages at once. That is what lets block_size=8 work (a 8-wide tl.dot is illegal) and
+what makes block_size=16 coalesce properly instead of issuing 16-element loads.
+
+Correctness gotchas, all of them in tests/test_paged_attention.py:
+  - the last page is partial: mask positions >= context_len or you attend to garbage
+  - GQA: query head h reads KV head h // (num_heads // num_kv_heads)
+  - accumulate in fp32, always -- fp16 accumulation drifts with context length
+  - context_len not a multiple of block_size is THE most common bug source
+"""
+
+from __future__ import annotations
