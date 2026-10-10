@@ -123,3 +123,23 @@ def reference_paged_attention_prefill(query, k_cache, v_cache, block_tables,
     p <= ctx - q_len + j. Top-left alignment (the naive `is_causal=True`) is wrong
     for every chunk after the first.
     """
+    num_heads, head_dim = query.shape[1], query.shape[2]
+    num_kv_heads = k_cache.shape[2]
+    block_size = k_cache.shape[1]
+    ratio = num_heads // num_kv_heads
+    outs = []
+    offset = 0
+    for i, q_len in enumerate(int(x) for x in query_lens):
+        ctx = int(context_lens[i])
+        q = query[offset:offset + q_len]
+        offset += q_len
+        nb = (ctx + block_size - 1) // block_size
+        blocks = block_tables[i, :nb]
+        k = k_cache[blocks].reshape(-1, num_kv_heads, head_dim)[:ctx]
+        v = v_cache[blocks].reshape(-1, num_kv_heads, head_dim)[:ctx]
+        if ratio > 1:
+            k = k.repeat_interleave(ratio, dim=1)
+            v = v.repeat_interleave(ratio, dim=1)
+        pos = torch.arange(ctx - q_len, ctx, device=q.device).unsqueeze(1)
+        keys = torch.arange(ctx, device=q.device).unsqueeze(0)
+        mask = keys <= pos
