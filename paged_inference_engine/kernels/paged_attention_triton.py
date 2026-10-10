@@ -82,3 +82,23 @@ def _pick_tile_kv(block_size: int, target: int = 64) -> int:
 
 
 # ===========================================================================
+# references (pure torch -- run on the MacBook, and are the test oracle)
+# ===========================================================================
+
+
+def reference_paged_attention_decode(query, k_cache, v_cache, block_tables,
+                                     context_lens, scale):
+    """Pure-PyTorch paged decode. Slow, obviously correct, runs anywhere.
+
+    query: (num_seqs, num_heads, head_dim)
+    k_cache/v_cache: (num_blocks, block_size, num_kv_heads, head_dim)
+    """
+    num_seqs, num_heads, head_dim = query.shape
+    num_kv_heads = k_cache.shape[2]
+    block_size = k_cache.shape[1]
+    ratio = num_heads // num_kv_heads
+    out = torch.empty_like(query)
+    for i in range(num_seqs):
+        ctx = int(context_lens[i])
+        nb = (ctx + block_size - 1) // block_size
+        blocks = block_tables[i, :nb]
