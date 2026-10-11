@@ -225,3 +225,24 @@ if HAS_TRITON:
             acc = acc * alpha[:, None] + tl.dot(p.to(v_tile.dtype), v_tile)
             l_i = l_i * alpha + tl.sum(p, 1)
             m_i = m_new
+
+        acc = acc / l_i[:, None]
+        o_off = seq * stride_os + (kv_head * GQA_RATIO + rows)[:, None] * stride_oh + d[None, :]
+        tl.store(out_ptr + o_off, acc.to(out_ptr.dtype.element_ty), mask=row_mask[:, None])
+
+    # -----------------------------------------------------------------------
+
+    @triton.jit
+    def _paged_attn_decode_split_kernel(
+        acc_ptr,             # (num_seqs, num_heads, SPLIT_K, head_dim) fp32
+        lse_m_ptr,           # (num_seqs, num_heads, SPLIT_K) fp32  running max
+        lse_l_ptr,           # (num_seqs, num_heads, SPLIT_K) fp32  running sum
+        q_ptr, k_cache_ptr, v_cache_ptr,
+        block_tables_ptr, context_lens_ptr,
+        scale,
+        stride_as, stride_ah, stride_ak,
+        stride_ls, stride_lh,
+        stride_qs, stride_qh,
+        stride_kb, stride_kt, stride_kh,
+        stride_bts,
+        HEAD_DIM: tl.constexpr,
