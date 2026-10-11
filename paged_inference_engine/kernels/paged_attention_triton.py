@@ -267,3 +267,24 @@ if HAS_TRITON:
         heads = kv_head * GQA_RATIO + rows
 
         num_tiles = tl.cdiv(ctx_len, TILE_KV)
+        tiles_per_split = tl.cdiv(num_tiles, SPLIT_K)
+        t_begin = split * tiles_per_split
+        t_end = tl.minimum(t_begin + tiles_per_split, num_tiles)
+
+        m_i = tl.full([PAD_GQA], float("-inf"), dtype=tl.float32)
+        l_i = tl.zeros([PAD_GQA], dtype=tl.float32)
+        acc = tl.zeros([PAD_GQA, HEAD_DIM], dtype=tl.float32)
+
+        if t_begin < t_end:
+            q_off = seq * stride_qs + heads[:, None] * stride_qh + d[None, :]
+            q = tl.load(q_ptr + q_off, mask=row_mask[:, None], other=0.0)
+
+            tile_idx = tl.arange(0, TILE_KV)
+            page_of = tile_idx // BLOCK_SIZE
+            slot_of = tile_idx % BLOCK_SIZE
+
+            for t in range(t_begin, t_end):
+                tok = t * TILE_KV + tile_idx
+                valid = tok < ctx_len
+                page_idx = t * (TILE_KV // BLOCK_SIZE) + page_of
+                phys = tl.load(block_tables_ptr + seq * stride_bts + page_idx,
