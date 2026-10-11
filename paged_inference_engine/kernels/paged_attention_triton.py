@@ -246,3 +246,24 @@ if HAS_TRITON:
         stride_kb, stride_kt, stride_kh,
         stride_bts,
         HEAD_DIM: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+        TILE_KV: tl.constexpr,
+        GQA_RATIO: tl.constexpr,
+        PAD_GQA: tl.constexpr,
+        SPLIT_K: tl.constexpr,
+    ):
+        """Flash-decoding partial pass: same math, but each program owns a slice of
+        the KV tiles. Turns a (num_seqs, num_kv_heads) grid into a
+        (num_seqs, num_kv_heads, SPLIT_K) one, which is the difference between
+        occupying 8 SMs and occupying all of them at batch size 1."""
+        seq = tl.program_id(0)
+        kv_head = tl.program_id(1)
+        split = tl.program_id(2)
+
+        ctx_len = tl.load(context_lens_ptr + seq)
+        rows = tl.arange(0, PAD_GQA)
+        row_mask = rows < GQA_RATIO
+        d = tl.arange(0, HEAD_DIM)
+        heads = kv_head * GQA_RATIO + rows
+
+        num_tiles = tl.cdiv(ctx_len, TILE_KV)
