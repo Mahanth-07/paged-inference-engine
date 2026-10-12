@@ -330,3 +330,24 @@ if HAS_TRITON:
         m_k = tl.load(lse_m_ptr + l_off)
         l_k = tl.load(lse_l_ptr + l_off)
         m = tl.max(m_k, 0)
+        w = tl.exp(m_k - m)
+        denom = tl.sum(w * l_k, 0)
+
+        a_off = seq * stride_as + head * stride_ah + splits[:, None] * stride_ak + d[None, :]
+        a = tl.load(acc_ptr + a_off)
+        num = tl.sum(a * w[:, None], 0)
+        tl.store(out_ptr + seq * stride_os + head * stride_oh + d,
+                 (num / denom).to(out_ptr.dtype.element_ty))
+
+    # -----------------------------------------------------------------------
+
+    @triton.jit
+    def _paged_prefill_kernel(
+        out_ptr,             # (num_q_tokens, num_heads, head_dim)
+        q_ptr,
+        k_cache_ptr, v_cache_ptr,
+        block_tables_ptr, context_lens_ptr, query_lens_ptr, qo_indptr_ptr,
+        scale,
+        stride_ot, stride_oh,
+        stride_qt, stride_qh,
+        stride_kb, stride_kt, stride_kh,
