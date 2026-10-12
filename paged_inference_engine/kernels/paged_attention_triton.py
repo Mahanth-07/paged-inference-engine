@@ -372,3 +372,24 @@ if HAS_TRITON:
         if m_block * BLOCK_M >= q_len:
             return
         ctx_len = tl.load(context_lens_ptr + seq)
+        q_start = tl.load(qo_indptr_ptr + seq)
+        kv_head = head // GQA_RATIO
+
+        offs_m = m_block * BLOCK_M + tl.arange(0, BLOCK_M)
+        m_valid = offs_m < q_len
+        abs_pos = ctx_len - q_len + offs_m          # absolute position of each query row
+        d = tl.arange(0, HEAD_DIM)
+
+        q = tl.load(
+            q_ptr + (q_start + offs_m)[:, None] * stride_qt + head * stride_qh + d[None, :],
+            mask=m_valid[:, None], other=0.0,
+        )
+
+        m_i = tl.full([BLOCK_M], float("-inf"), dtype=tl.float32)
+        l_i = tl.zeros([BLOCK_M], dtype=tl.float32)
+        acc = tl.zeros([BLOCK_M, HEAD_DIM], dtype=tl.float32)
+
+        tile_idx = tl.arange(0, TILE_KV)
+        page_of = tile_idx // BLOCK_SIZE
+        slot_of = tile_idx % BLOCK_SIZE
+
