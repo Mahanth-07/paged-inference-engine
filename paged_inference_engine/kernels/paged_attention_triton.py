@@ -309,3 +309,24 @@ if HAS_TRITON:
         tl.store(lse_m_ptr + l_off, m_i, mask=row_mask)
         tl.store(lse_l_ptr + l_off, l_i, mask=row_mask)
 
+    @triton.jit
+    def _combine_kernel(
+        out_ptr, acc_ptr, lse_m_ptr, lse_l_ptr,
+        stride_os, stride_oh,
+        stride_as, stride_ah, stride_ak,
+        stride_ls, stride_lh,
+        HEAD_DIM: tl.constexpr,
+        SPLIT_K: tl.constexpr,
+    ):
+        """Merge SPLIT_K partial softmaxes. Standard log-sum-exp rescale:
+        each split contributes exp(m_k - m) * acc_k, weighted sum over exp(m_k - m)*l_k.
+        Splits that got no tiles have l=0 and acc=0 and drop out on their own."""
+        seq = tl.program_id(0)
+        head = tl.program_id(1)
+        d = tl.arange(0, HEAD_DIM)
+        splits = tl.arange(0, SPLIT_K)
+
+        l_off = seq * stride_ls + head * stride_lh + splits
+        m_k = tl.load(lse_m_ptr + l_off)
+        l_k = tl.load(lse_l_ptr + l_off)
+        m = tl.max(m_k, 0)
