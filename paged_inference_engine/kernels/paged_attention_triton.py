@@ -393,3 +393,24 @@ if HAS_TRITON:
         page_of = tile_idx // BLOCK_SIZE
         slot_of = tile_idx % BLOCK_SIZE
 
+        # Causality bounds the KV we need: nothing past the last query's position.
+        max_key = tl.minimum(ctx_len, ctx_len - q_len + (m_block + 1) * BLOCK_M)
+        num_tiles = tl.cdiv(max_key, TILE_KV)
+
+        for t in range(0, num_tiles):
+            tok = t * TILE_KV + tile_idx
+            valid = tok < ctx_len
+            page_idx = t * (TILE_KV // BLOCK_SIZE) + page_of
+            phys = tl.load(block_tables_ptr + seq * stride_bts + page_idx,
+                           mask=valid, other=0)
+            base = phys * stride_kb + slot_of * stride_kt + kv_head * stride_kh
+            k_t = tl.load(k_cache_ptr + base[None, :] + d[:, None],
+                          mask=valid[None, :], other=0.0)
+            qk = tl.dot(q, k_t) * scale
+            keep = valid[None, :] & (tok[None, :] <= abs_pos[:, None])
+            qk = tl.where(keep, qk, float("-inf"))
+
+            m_new = tl.maximum(m_i, tl.max(qk, 1))
+            # A row whose every key is masked stays at -inf; force alpha/p to 0 there
+            # instead of producing inf-inf = nan.
+            m_safe = tl.where(m_new == float("-inf"), 0.0, m_new)
