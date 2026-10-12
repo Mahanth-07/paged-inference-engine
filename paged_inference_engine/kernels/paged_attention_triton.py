@@ -288,3 +288,24 @@ if HAS_TRITON:
                 valid = tok < ctx_len
                 page_idx = t * (TILE_KV // BLOCK_SIZE) + page_of
                 phys = tl.load(block_tables_ptr + seq * stride_bts + page_idx,
+                               mask=valid, other=0)
+                base = phys * stride_kb + slot_of * stride_kt + kv_head * stride_kh
+                k_t = tl.load(k_cache_ptr + base[None, :] + d[:, None],
+                              mask=valid[None, :], other=0.0)
+                qk = tl.dot(q, k_t) * scale
+                qk = tl.where(valid[None, :], qk, float("-inf"))
+                m_new = tl.maximum(m_i, tl.max(qk, 1))
+                alpha = tl.exp(m_i - m_new)
+                p = tl.exp(qk - m_new[:, None])
+                v_tile = tl.load(v_cache_ptr + base[:, None] + d[None, :],
+                                 mask=valid[:, None], other=0.0)
+                acc = acc * alpha[:, None] + tl.dot(p.to(v_tile.dtype), v_tile)
+                l_i = l_i * alpha + tl.sum(p, 1)
+                m_i = m_new
+
+        a_off = seq * stride_as + heads[:, None] * stride_ah + split * stride_ak + d[None, :]
+        tl.store(acc_ptr + a_off, acc, mask=row_mask[:, None])
+        l_off = seq * stride_ls + heads * stride_lh + split
+        tl.store(lse_m_ptr + l_off, m_i, mask=row_mask)
+        tl.store(lse_l_ptr + l_off, l_i, mask=row_mask)
+
