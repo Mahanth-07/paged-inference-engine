@@ -351,3 +351,24 @@ if HAS_TRITON:
         stride_ot, stride_oh,
         stride_qt, stride_qh,
         stride_kb, stride_kt, stride_kh,
+        stride_bts,
+        HEAD_DIM: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+        TILE_KV: tl.constexpr,
+        BLOCK_M: tl.constexpr,
+        GQA_RATIO: tl.constexpr,
+    ):
+        """FlashAttention-2 forward, K/V fetched through the block table.
+
+        Causal masking is BOTTOM-RIGHT aligned: query row m of a chunk sits at absolute
+        position (ctx_len - q_len + m). Under chunked prefill the chunk does not start
+        at position 0, so top-left `is_causal` would let early queries see the future
+        and hide the rest of their own context."""
+        m_block = tl.program_id(0)
+        seq = tl.program_id(1)
+        head = tl.program_id(2)
+
+        q_len = tl.load(query_lens_ptr + seq)
+        if m_block * BLOCK_M >= q_len:
+            return
+        ctx_len = tl.load(context_lens_ptr + seq)
