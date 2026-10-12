@@ -434,3 +434,24 @@ if HAS_TRITON:
 
 # ===========================================================================
 # host-side launchers
+# ===========================================================================
+
+
+def _require_triton():
+    if not HAS_TRITON or _DISABLE:
+        raise RuntimeError(
+            "Triton is unavailable (you are probably on the Mac). Use backend='naive'."
+        )
+
+
+def choose_split_k(num_seqs: int, num_kv_heads: int, max_context: int,
+                   num_sms: int = 108, tile_kv: int = 64) -> int:
+    """How many ways to split the KV sweep.
+
+    The v1 grid is num_seqs * num_kv_heads programs. When that is well under the SM
+    count the GPU is mostly idle, so split until we fill it -- but never into slices
+    smaller than one tile, which would just add combine overhead for no parallelism.
+    """
+    base = max(1, num_seqs * num_kv_heads)
+    if base >= num_sms:
+        return 1
