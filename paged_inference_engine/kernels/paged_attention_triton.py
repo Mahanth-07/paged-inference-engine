@@ -414,3 +414,23 @@ if HAS_TRITON:
             # A row whose every key is masked stays at -inf; force alpha/p to 0 there
             # instead of producing inf-inf = nan.
             m_safe = tl.where(m_new == float("-inf"), 0.0, m_new)
+            alpha = tl.exp(tl.where(m_i == float("-inf"), 0.0, m_i) - m_safe)
+            alpha = tl.where(m_i == float("-inf"), 0.0, alpha)
+            p = tl.exp(qk - m_safe[:, None])
+            p = tl.where(keep, p, 0.0)
+
+            v_tile = tl.load(v_cache_ptr + base[:, None] + d[None, :],
+                             mask=valid[:, None], other=0.0)
+            acc = acc * alpha[:, None] + tl.dot(p.to(v_tile.dtype), v_tile)
+            l_i = l_i * alpha + tl.sum(p, 1)
+            m_i = m_new
+
+        acc = acc / tl.where(l_i == 0.0, 1.0, l_i)[:, None]
+        tl.store(
+            out_ptr + (q_start + offs_m)[:, None] * stride_ot + head * stride_oh + d[None, :],
+            acc.to(out_ptr.dtype.element_ty), mask=m_valid[:, None],
+        )
+
+
+# ===========================================================================
+# host-side launchers
