@@ -476,3 +476,23 @@ def paged_attention_decode(query, k_cache, v_cache, block_tables, context_lens,
                   it built context_lens from a Python list -- and reading it off the
                   device here would be a full sync, once per LAYER, every step.
     """
+    _require_triton()
+    num_seqs, num_heads, head_dim = query.shape
+    block_size, num_kv_heads = k_cache.shape[1], k_cache.shape[2]
+    assert num_heads % num_kv_heads == 0, "num_heads must be a multiple of num_kv_heads"
+    assert k_cache.shape[3] == head_dim and v_cache.shape == k_cache.shape
+    assert block_tables.shape[0] == num_seqs and context_lens.shape[0] == num_seqs
+    assert block_tables.dtype == torch.int32 and context_lens.dtype == torch.int32
+    gqa = num_heads // num_kv_heads
+    pad_gqa = max(MIN_DOT, triton.next_power_of_2(gqa))
+    tile_kv = _pick_tile_kv(block_size)
+    if out is None:
+        out = torch.empty_like(query)
+
+    if split_k is None:
+        props = torch.cuda.get_device_properties(query.device)
+        if max_context is None:
+            max_context = int(context_lens.max())   # sync; avoid by passing it in
+        split_k = choose_split_k(num_seqs, num_kv_heads, max_context,
+                                 props.multi_processor_count, tile_kv)
+
