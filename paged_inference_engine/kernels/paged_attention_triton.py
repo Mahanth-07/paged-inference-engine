@@ -455,3 +455,24 @@ def choose_split_k(num_seqs: int, num_kv_heads: int, max_context: int,
     base = max(1, num_seqs * num_kv_heads)
     if base >= num_sms:
         return 1
+    max_useful = max(1, (max_context + tile_kv - 1) // tile_kv)
+    want = min((num_sms + base - 1) // base, max_useful, 32)
+    # Round DOWN to a power of two last, not first: _combine_kernel indexes the splits
+    # with tl.arange(0, SPLIT_K), which requires a power of two. Clamping after the
+    # rounding can hand back e.g. 3 and the combine kernel fails to compile.
+    return 1 << int(math.floor(math.log2(max(1, want))))
+
+
+def paged_attention_decode(query, k_cache, v_cache, block_tables, context_lens,
+                           scale, split_k: Optional[int] = None, out=None,
+                           max_context: Optional[int] = None):
+    """Paged decode attention.
+
+    query:        (num_seqs, num_heads, head_dim)
+    k/v_cache:    (num_blocks, block_size, num_kv_heads, head_dim)
+    block_tables: (num_seqs, max_num_pages) int32
+    context_lens: (num_seqs,) int32
+    max_context:  host-side max(context_lens). Pass it! The caller already knows it --
+                  it built context_lens from a Python list -- and reading it off the
+                  device here would be a full sync, once per LAYER, every step.
+    """
