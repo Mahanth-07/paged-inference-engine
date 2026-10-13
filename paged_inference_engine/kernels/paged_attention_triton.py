@@ -536,3 +536,24 @@ def paged_attention_decode(query, k_cache, v_cache, block_tables, context_lens,
     )
     return out
 
+
+def paged_attention_prefill(query, k_cache, v_cache, block_tables, context_lens,
+                            query_lens, qo_indptr, scale, block_m: int = 64, out=None,
+                            max_query_len: Optional[int] = None):
+    """Paged (chunked) prefill attention.
+
+    query:   (num_q_tokens, num_heads, head_dim), sequences concatenated
+    qo_indptr: (num_seqs + 1,) int32 cumulative query lengths
+    context_lens[i]: total KV length for sequence i AFTER this chunk is written
+    """
+    _require_triton()
+    num_tokens, num_heads, head_dim = query.shape
+    block_size, num_kv_heads = k_cache.shape[1], k_cache.shape[2]
+    num_seqs = block_tables.shape[0]
+    assert query_lens.shape[0] == num_seqs and context_lens.shape[0] == num_seqs
+    assert qo_indptr.shape[0] == num_seqs + 1
+    assert block_tables.dtype == torch.int32
+    gqa = num_heads // num_kv_heads
+    tile_kv = _pick_tile_kv(block_size)
+    if out is None:
+        out = torch.empty_like(query)
