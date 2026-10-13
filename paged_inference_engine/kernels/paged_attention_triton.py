@@ -496,3 +496,23 @@ def paged_attention_decode(query, k_cache, v_cache, block_tables, context_lens,
         split_k = choose_split_k(num_seqs, num_kv_heads, max_context,
                                  props.multi_processor_count, tile_kv)
 
+    common = dict(
+        HEAD_DIM=head_dim, BLOCK_SIZE=block_size, TILE_KV=tile_kv,
+        GQA_RATIO=gqa, PAD_GQA=pad_gqa, num_warps=4, num_stages=2,
+    )
+
+    if split_k <= 1:
+        _paged_attn_decode_kernel[(num_seqs, num_kv_heads)](
+            out, query, k_cache, v_cache, block_tables, context_lens, scale,
+            out.stride(0), out.stride(1),
+            query.stride(0), query.stride(1),
+            k_cache.stride(0), k_cache.stride(1), k_cache.stride(2),
+            block_tables.stride(0),
+            **common,
+        )
+        return out
+
+    acc = torch.empty(num_seqs, num_heads, split_k, head_dim,
+                      dtype=torch.float32, device=query.device)
+    lse_m = torch.full((num_seqs, num_heads, split_k), float("-inf"),
+                       dtype=torch.float32, device=query.device)
