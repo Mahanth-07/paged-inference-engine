@@ -516,3 +516,23 @@ def paged_attention_decode(query, k_cache, v_cache, block_tables, context_lens,
                       dtype=torch.float32, device=query.device)
     lse_m = torch.full((num_seqs, num_heads, split_k), float("-inf"),
                        dtype=torch.float32, device=query.device)
+    lse_l = torch.zeros((num_seqs, num_heads, split_k),
+                        dtype=torch.float32, device=query.device)
+    _paged_attn_decode_split_kernel[(num_seqs, num_kv_heads, split_k)](
+        acc, lse_m, lse_l, query, k_cache, v_cache, block_tables, context_lens, scale,
+        acc.stride(0), acc.stride(1), acc.stride(2),
+        lse_m.stride(0), lse_m.stride(1),
+        query.stride(0), query.stride(1),
+        k_cache.stride(0), k_cache.stride(1), k_cache.stride(2),
+        block_tables.stride(0),
+        SPLIT_K=split_k, **common,
+    )
+    _combine_kernel[(num_seqs, num_heads)](
+        out, acc, lse_m, lse_l,
+        out.stride(0), out.stride(1),
+        acc.stride(0), acc.stride(1), acc.stride(2),
+        lse_m.stride(0), lse_m.stride(1),
+        HEAD_DIM=head_dim, SPLIT_K=split_k, num_warps=4,
+    )
+    return out
+
