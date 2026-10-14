@@ -45,3 +45,24 @@ class RequestMetrics:
 
     @property
     def tpot(self) -> Optional[float]:
+        if self.finish_time is None or self.first_token_time is None or self.output_len < 2:
+            return None
+        return (self.finish_time - self.first_token_time) / (self.output_len - 1)
+
+
+@dataclass
+class StepMetrics:
+    num_batched_tokens: int
+    num_prefill_seqs: int
+    num_decode_seqs: int
+    step_latency: float
+    kv_utilization: float
+    num_preempted: int
+
+
+def percentile(xs: list[float], p: float) -> float:
+    if not xs:
+        return float("nan")
+    xs = sorted(xs)
+    k = (len(xs) - 1) * p / 100.0
+    lo, hi = int(k), min(int(k) + 1, len(xs) - 1)
