@@ -66,3 +66,24 @@ def percentile(xs: list[float], p: float) -> float:
     xs = sorted(xs)
     k = (len(xs) - 1) * p / 100.0
     lo, hi = int(k), min(int(k) + 1, len(xs) - 1)
+    return xs[lo] + (xs[hi] - xs[lo]) * (k - lo)
+
+
+class MetricsCollector:
+    def __init__(self) -> None:
+        self.requests: list[RequestMetrics] = []
+        self.steps: list[StepMetrics] = []
+        self.start_time: Optional[float] = None
+        self.end_time: Optional[float] = None
+
+    def record_step(self, **kwargs) -> None:
+        self.steps.append(StepMetrics(**kwargs))
+
+    def record_request(self, seq: Sequence) -> None:
+        itls = [b - a for a, b in zip(seq.token_times, seq.token_times[1:])]
+        self.requests.append(
+            RequestMetrics(
+                seq_id=seq.seq_id,
+                prompt_len=seq.prompt_len,
+                output_len=seq.output_len,
+                arrival_time=seq.arrival_time,
