@@ -557,3 +557,18 @@ def paged_attention_prefill(query, k_cache, v_cache, block_tables, context_lens,
     tile_kv = _pick_tile_kv(block_size)
     if out is None:
         out = torch.empty_like(query)
+    # Host-side value if the caller has it; otherwise a sync, once per layer.
+    max_q = max_query_len if max_query_len is not None else int(query_lens.max())
+    grid = ((max_q + block_m - 1) // block_m, num_seqs, num_heads)
+    _paged_prefill_kernel[grid](
+        out, query, k_cache, v_cache,
+        block_tables, context_lens, query_lens, qo_indptr, scale,
+        out.stride(0), out.stride(1),
+        query.stride(0), query.stride(1),
+        k_cache.stride(0), k_cache.stride(1), k_cache.stride(2),
+        block_tables.stride(0),
+        HEAD_DIM=head_dim, BLOCK_SIZE=block_size, TILE_KV=tile_kv,
+        BLOCK_M=block_m, GQA_RATIO=gqa,
+        num_warps=4, num_stages=2,
+    )
+    return out
