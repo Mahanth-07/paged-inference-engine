@@ -87,3 +87,24 @@ class MetricsCollector:
                 prompt_len=seq.prompt_len,
                 output_len=seq.output_len,
                 arrival_time=seq.arrival_time,
+                first_token_time=seq.first_token_time,
+                finish_time=seq.finish_time,
+                num_preemptions=seq.num_preemptions,
+                itls=itls,
+            )
+        )
+
+    # ---- summary ----------------------------------------------------------
+
+    def summary(self, duration: Optional[float] = None) -> dict:
+        reqs = self.requests
+        if not reqs:
+            return {}
+        if duration is None:
+            duration = max(r.finish_time or 0 for r in reqs) - min(r.arrival_time for r in reqs)
+        duration = max(duration, 1e-9)
+
+        ttfts = [r.ttft for r in reqs if r.ttft is not None]
+        tpots = [r.tpot for r in reqs if r.tpot is not None]
+        e2els = [r.e2el for r in reqs if r.e2el is not None]
+        itls = [x for r in reqs for x in r.itls]
