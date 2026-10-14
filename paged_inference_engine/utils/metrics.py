@@ -150,3 +150,17 @@ class MetricsCollector:
         if not reqs:
             return 0.0
         if duration is None:
+            duration = max(r.finish_time or 0 for r in reqs) - min(r.arrival_time for r in reqs)
+        good = sum(
+            1 for r in reqs
+            if r.ttft is not None and r.ttft * 1000 <= ttft_slo_ms
+            and r.tpot is not None and r.tpot * 1000 <= tpot_slo_ms
+        )
+        return good / max(duration, 1e-9)
+
+    def dump(self, path: str, extra: Optional[dict] = None) -> None:
+        payload = {"summary": self.summary(), "requests": [asdict(r) for r in self.requests]}
+        if extra:
+            payload["config"] = extra
+        with open(path, "w") as f:
+            json.dump(payload, f, indent=2)
