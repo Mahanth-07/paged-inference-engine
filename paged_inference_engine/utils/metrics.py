@@ -24,3 +24,24 @@ from ..sequence import Sequence
 class RequestMetrics:
     seq_id: int
     prompt_len: int
+    output_len: int
+    arrival_time: float
+    first_token_time: Optional[float]
+    finish_time: Optional[float]
+    num_preemptions: int
+    itls: list[float] = field(default_factory=list)
+
+    @property
+    def ttft(self) -> Optional[float]:
+        if self.first_token_time is None:
+            return None
+        return self.first_token_time - self.arrival_time
+
+    @property
+    def e2el(self) -> Optional[float]:
+        if self.finish_time is None:
+            return None
+        return self.finish_time - self.arrival_time
+
+    @property
+    def tpot(self) -> Optional[float]:
