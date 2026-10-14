@@ -129,3 +129,24 @@ class MetricsCollector:
             "total_output_tokens": out_tokens,
             "num_preemptions": sum(r.num_preemptions for r in reqs),
         }
+        summary.update(dist("ttft", ttfts))
+        summary.update(dist("tpot", tpots))
+        summary.update(dist("itl", itls))
+        summary.update(dist("e2el", e2els))
+
+        if self.steps:
+            summary["mean_batch_size"] = statistics.fmean(
+                s.num_prefill_seqs + s.num_decode_seqs for s in self.steps
+            )
+            summary["mean_batched_tokens"] = statistics.fmean(s.num_batched_tokens for s in self.steps)
+            summary["mean_kv_utilization"] = statistics.fmean(s.kv_utilization for s in self.steps)
+            summary["mean_step_latency_ms"] = statistics.fmean(s.step_latency for s in self.steps) * 1000
+        return summary
+
+    def goodput(self, ttft_slo_ms: float = 500.0, tpot_slo_ms: float = 50.0,
+                duration: Optional[float] = None) -> float:
+        """Requests per second meeting both TTFT and TPOT limits."""
+        reqs = self.requests
+        if not reqs:
+            return 0.0
+        if duration is None:
