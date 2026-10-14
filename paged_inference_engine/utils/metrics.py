@@ -108,3 +108,24 @@ class MetricsCollector:
         tpots = [r.tpot for r in reqs if r.tpot is not None]
         e2els = [r.e2el for r in reqs if r.e2el is not None]
         itls = [x for r in reqs for x in r.itls]
+        out_tokens = sum(r.output_len for r in reqs)
+        in_tokens = sum(r.prompt_len for r in reqs)
+
+        def dist(name, xs, scale=1000.0):
+            return {
+                f"mean_{name}_ms": statistics.fmean(xs) * scale if xs else float("nan"),
+                f"median_{name}_ms": percentile(xs, 50) * scale,
+                f"p90_{name}_ms": percentile(xs, 90) * scale,
+                f"p99_{name}_ms": percentile(xs, 99) * scale,
+            }
+
+        summary = {
+            "num_requests": len(reqs),
+            "duration_s": duration,
+            "request_throughput_rps": len(reqs) / duration,
+            "output_throughput_tok_s": out_tokens / duration,
+            "total_throughput_tok_s": (in_tokens + out_tokens) / duration,
+            "total_input_tokens": in_tokens,
+            "total_output_tokens": out_tokens,
+            "num_preemptions": sum(r.num_preemptions for r in reqs),
+        }
