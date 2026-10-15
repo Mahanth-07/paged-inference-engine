@@ -171,3 +171,12 @@ def main():
         for rate, s in rows:
             print(f"{rate:>6.1f} {s['output_throughput_tok_s']:>10.1f} "
                   f"{s['median_ttft_ms']:>9.1f}m {s['p99_ttft_ms']:>9.1f}m "
+                  f"{s['p99_itl_ms']:>8.1f}m {s['num_preemptions']:>8} "
+                  f"{s['mean_kv_utilization']*100:>5.1f}% "
+                  f"{s['num_completed']:>4}/{s['num_submitted']:<4}")
+    else:
+        print(json.dumps(rows[0][1], indent=2))
+
+
+if __name__ == "__main__":
+    main()
