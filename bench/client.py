@@ -10,3 +10,23 @@ result into a number nobody should believe, including you:
   * Poisson arrivals, not a fixed batch. A fixed batch measures a different system --
     one with no queueing -- and hides exactly the tail behaviour that matters.
   * ignore_eos + a fixed output length, so every system generates the same token count.
+    Otherwise you are comparing generation lengths, not engines.
+  * Discard warmup requests (first-request compile/alloc costs are real but not the
+    steady state you are reporting).
+  * Same seed, same prompts, same max-model-len, same dtype across systems.
+  * >= 3 runs; report median and spread.
+  * Check the CLIENT is not the bottleneck -- see --check-client-capacity.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import os
+import random
+import time
+from dataclasses import dataclass, field
+from typing import Optional
+
+from paged_inference_engine.utils.metrics import percentile
