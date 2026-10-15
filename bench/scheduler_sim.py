@@ -109,3 +109,23 @@ def simulate(trace, sched_cfg: SchedulerConfig, num_blocks: int, block_size: int
         for s in out.decodes:
             s.seq.append_token(0, now=now)
 
+        metrics.record_step(
+            num_batched_tokens=out.num_batched_tokens,
+            num_prefill_seqs=len(out.prefills),
+            num_decode_seqs=len(out.decodes),
+            step_latency=dt,
+            kv_utilization=bm.utilization,
+            num_preempted=len(out.preempted),
+        )
+        for seq in scheduler.free_finished(eos_token_id=None):
+            seq.finish_time = now
+            metrics.record_request(seq)
+
+    s = metrics.summary(duration=now)
+    s["goodput_rps"] = metrics.goodput(duration=now)
+    s.update(scheduler.stats())
+    # Report what did NOT complete. Without this, a run where the scheduler rejected or
+    # stalled most of the trace looks merely "slow" instead of "dropped the workload",
+    # which is a very different thing.
+    s["num_submitted"] = len(trace)
+    s["num_completed"] = len(metrics.requests)
