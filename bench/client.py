@@ -30,3 +30,23 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from paged_inference_engine.utils.metrics import percentile
+
+
+@dataclass
+class RequestResult:
+    success: bool
+    prompt_len: int
+    output_len: int
+    ttft: float = 0.0
+    latency: float = 0.0
+    itls: list[float] = field(default_factory=list)
+    error: str = ""
+
+
+# ---- datasets -------------------------------------------------------------
+
+
+def load_sharegpt(path: str, num_prompts: int, tokenizer, seed: int = 0,
+                  fixed_output_len: Optional[int] = None):
+    """ShareGPT is what vLLM's own benchmarks use, so the numbers are comparable.
+
