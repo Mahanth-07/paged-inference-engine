@@ -47,3 +47,24 @@ class CostModel:
                 self.decode_base_us
                 + self.decode_us_per_seq * decode_seqs
                 + self.decode_us_per_kv_token * decode_kv_tokens
+            )
+        return t / 1e6
+
+
+def make_trace(n: int, rate: float, rng: random.Random) -> list[tuple[float, int, int]]:
+    """(arrival_time, prompt_len, output_len), Poisson arrivals, lognormal lengths.
+
+    Lognormal is the right shape: real chat traffic has a heavy tail of long prompts,
+    and it is exactly that tail that makes chunked prefill and preemption matter.
+    Uniform lengths make your scheduler look better than it is.
+    """
+    trace = []
+    t = 0.0
+    for _ in range(n):
+        t += rng.expovariate(rate) if rate > 0 else 0.0
+        prompt_len = max(8, min(4000, int(rng.lognormvariate(6.0, 0.9))))
+        output_len = max(1, min(1024, int(rng.lognormvariate(4.8, 0.8))))
+        trace.append((t, prompt_len, output_len))
+    return trace
+
+
