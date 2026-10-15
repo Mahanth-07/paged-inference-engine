@@ -68,3 +68,24 @@ def make_trace(n: int, rate: float, rng: random.Random) -> list[tuple[float, int
     return trace
 
 
+def simulate(trace, sched_cfg: SchedulerConfig, num_blocks: int, block_size: int,
+             cost: CostModel) -> dict:
+    bm = BlockManager(num_blocks=num_blocks, block_size=block_size)
+    scheduler = Scheduler(sched_cfg, bm)
+    metrics = MetricsCollector()
+
+    pending = list(trace)
+    now = 0.0
+    step = 0
+    max_steps = 2_000_000
+
+    while (pending or scheduler.has_unfinished) and step < max_steps:
+        step += 1
+        while pending and pending[0][0] <= now:
+            arrival, plen, olen = pending.pop(0)
+            seq = Sequence(
+                prompt_token_ids=[0] * plen,
+                sampling_params=SamplingParams(max_tokens=olen, ignore_eos=True),
+                arrival_time=arrival,
+            )
+            scheduler.add_seq(seq)
