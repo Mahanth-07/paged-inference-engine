@@ -150,3 +150,24 @@ def main():
 
     cfg = SchedulerConfig(
         max_num_batched_tokens=args.max_num_batched_tokens,
+        max_num_seqs=args.max_num_seqs,
+        enable_chunked_prefill=not args.no_chunked_prefill,
+    )
+    cost = CostModel()
+
+    rates = [1, 2, 4, 8, 12, 16, 24, 32] if args.sweep else [args.request_rate]
+    rows = []
+    for rate in rates:
+        rng = random.Random(args.seed)
+        trace = make_trace(args.num_requests, rate, rng)
+        s = simulate(trace, cfg, args.num_blocks, args.block_size, cost)
+        rows.append((rate, s))
+
+    if args.sweep:
+        hdr = (f"{'rate':>6} {'out tok/s':>10} {'p50 TTFT':>10} {'p99 TTFT':>10} "
+               f"{'p99 ITL':>9} {'preempt':>8} {'kv%':>6} {'done':>9}")
+        print(hdr)
+        print("-" * len(hdr))
+        for rate, s in rows:
+            print(f"{rate:>6.1f} {s['output_throughput_tok_s']:>10.1f} "
+                  f"{s['median_ttft_ms']:>9.1f}m {s['p99_ttft_ms']:>9.1f}m "
