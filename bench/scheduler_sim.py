@@ -129,3 +129,24 @@ def simulate(trace, sched_cfg: SchedulerConfig, num_blocks: int, block_size: int
     # which is a very different thing.
     s["num_submitted"] = len(trace)
     s["num_completed"] = len(metrics.requests)
+    s["num_unfinished"] = len(trace) - len(metrics.requests) - len(pending)
+    s["num_never_admitted"] = len(pending)
+    return s
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--num-requests", type=int, default=300)
+    ap.add_argument("--request-rate", type=float, default=8.0)
+    ap.add_argument("--num-blocks", type=int, default=8192)
+    ap.add_argument("--block-size", type=int, default=16)
+    ap.add_argument("--max-num-batched-tokens", type=int, default=8192)
+    ap.add_argument("--max-num-seqs", type=int, default=256)
+    ap.add_argument("--no-chunked-prefill", action="store_true")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--sweep", action="store_true",
+                    help="Sweep request rate and print a throughput/latency table.")
+    args = ap.parse_args()
+
+    cfg = SchedulerConfig(
+        max_num_batched_tokens=args.max_num_batched_tokens,
