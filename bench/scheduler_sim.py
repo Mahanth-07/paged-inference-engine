@@ -89,3 +89,23 @@ def simulate(trace, sched_cfg: SchedulerConfig, num_blocks: int, block_size: int
                 arrival_time=arrival,
             )
             scheduler.add_seq(seq)
+
+        out = scheduler.schedule()
+        if out.is_empty:
+            if pending:
+                now = pending[0][0]
+                continue
+            break
+
+        prefill_tokens = sum(s.num_tokens for s in out.prefills)
+        decode_kv = sum(s.seq.total_len for s in out.decodes)
+        dt = cost.step_time(prefill_tokens, len(out.decodes), decode_kv)
+        now += dt
+
+        for s in out.prefills:
+            s.seq.num_computed_tokens += s.num_tokens
+            if s.seq.num_computed_tokens >= s.seq.total_len:
+                s.seq.append_token(0, now=now)
+        for s in out.decodes:
+            s.seq.append_token(0, now=now)
+
