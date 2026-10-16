@@ -71,3 +71,23 @@ def load_sharegpt(path: str, num_prompts: int, tokenizer, seed: int = 0,
     rng.shuffle(raw)
 
     out = []
+    for d in raw:
+        prompt = d["conversations"][0]["value"]
+        completion = d["conversations"][1]["value"]
+        p_ids = tokenizer.encode(prompt)
+        c_len = len(tokenizer.encode(completion))
+        if len(p_ids) < 4 or len(p_ids) > 1024:
+            continue
+        o_len = fixed_output_len if fixed_output_len else c_len
+        if o_len < 4:
+            continue
+        out.append((prompt, len(p_ids), min(o_len, 2048)))
+        if len(out) >= num_prompts:
+            break
+    if len(out) < num_prompts:
+        raise ValueError(f"only {len(out)} usable prompts in {path}, wanted {num_prompts}")
+    return out
+
+
+def synthetic(num_prompts: int, input_len: int, output_len: int, tokenizer,
+              seed: int = 0):
