@@ -50,3 +50,24 @@ def load_sharegpt(path: str, num_prompts: int, tokenizer, seed: int = 0,
                   fixed_output_len: Optional[int] = None):
     """ShareGPT is what vLLM's own benchmarks use, so the numbers are comparable.
 
+    Download:
+      https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered
+      ShareGPT_V3_unfiltered_cleaned_split.json
+
+    Its length distribution is heavy-tailed, which is the whole point: uniform lengths
+    make a scheduler look better than it is, because the long-prompt stalls and the
+    early-finisher waste both disappear.
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{path} not found. Download ShareGPT_V3_unfiltered_cleaned_split.json from "
+            "https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered "
+            "or use --dataset synthetic."
+        )
+    with open(path) as f:
+        raw = json.load(f)
+    raw = [d for d in raw if len(d.get("conversations", [])) >= 2]
+    rng = random.Random(seed)
+    rng.shuffle(raw)
+
+    out = []
