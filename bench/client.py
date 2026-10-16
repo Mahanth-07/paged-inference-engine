@@ -91,3 +91,24 @@ def load_sharegpt(path: str, num_prompts: int, tokenizer, seed: int = 0,
 
 def synthetic(num_prompts: int, input_len: int, output_len: int, tokenizer,
               seed: int = 0):
+    """Fixed-length synthetic prompts, for clean ablations where you want to isolate
+    one variable. Use ShareGPT for headline numbers -- fixed lengths make continuous
+    batching look worse than it is, because there are no early finishers to reclaim."""
+    rng = random.Random(seed)
+    vocab = getattr(tokenizer, "vocab_size", 32000)
+    out = []
+    for _ in range(num_prompts):
+        ids = [rng.randrange(1000, min(vocab, 20000)) for _ in range(input_len)]
+        out.append((tokenizer.decode(ids), input_len, output_len))
+    return out
+
+
+# ---- request driver -------------------------------------------------------
+
+
+async def send_openai_completion(session, url: str, model: str, prompt: str,
+                                 output_len: int, prompt_len: int,
+                                 sem=None) -> RequestResult:
+    """POST /v1/completions with stream=True, ignore_eos=True, temperature=0.
+
+    The subtle part is TTFT. Servers often send a first SSE chunk carrying only role or
