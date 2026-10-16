@@ -112,3 +112,24 @@ async def send_openai_completion(session, url: str, model: str, prompt: str,
     """POST /v1/completions with stream=True, ignore_eos=True, temperature=0.
 
     The subtle part is TTFT. Servers often send a first SSE chunk carrying only role or
+    metadata and no token; counting it as the first token gives a flattering, wrong
+    number. So we only start the clock on a chunk that actually contains generated text
+    (or, for a tokens-only server, a chunk at all after the metadata one).
+    """
+    payload = {
+        "model": model, "prompt": prompt, "max_tokens": output_len,
+        "min_tokens": output_len,       # pin the count on servers that honour it
+        "temperature": 0.0, "stream": True, "ignore_eos": True,
+    }
+    result = RequestResult(success=False, prompt_len=prompt_len, output_len=0)
+    ctx = sem if sem is not None else _NullCtx()
+    async with ctx:
+        st = time.perf_counter()
+        last = st
+        try:
+            async with session.post(url, json=payload) as resp:
+                if resp.status != 200:
+                    result.error = f"HTTP {resp.status}: {(await resp.text())[:200]}"
+                    return result
+                async for raw in resp.content:
+                    line = raw.decode("utf-8").strip()
