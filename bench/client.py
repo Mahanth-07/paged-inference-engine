@@ -133,3 +133,24 @@ async def send_openai_completion(session, url: str, model: str, prompt: str,
                     return result
                 async for raw in resp.content:
                     line = raw.decode("utf-8").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    chunk = json.loads(data)
+                    choice = chunk["choices"][0]
+                    text = choice.get("text") or choice.get("delta", {}).get("content") or ""
+                    if not text and choice.get("finish_reason") is None and result.output_len == 0:
+                        continue          # metadata-only opening chunk
+                    now = time.perf_counter()
+                    if result.output_len == 0:
+                        result.ttft = now - st
+                    else:
+                        result.itls.append(now - last)
+                    last = now
+                    result.output_len += 1
+                result.latency = time.perf_counter() - st
+                result.success = result.output_len > 0
+        except Exception as e:  # noqa: BLE001 -- a failed request is data, not a crash
+            result.error = f"{type(e).__name__}: {e}"
