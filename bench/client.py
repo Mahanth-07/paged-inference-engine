@@ -154,3 +154,23 @@ async def send_openai_completion(session, url: str, model: str, prompt: str,
                 result.success = result.output_len > 0
         except Exception as e:  # noqa: BLE001 -- a failed request is data, not a crash
             result.error = f"{type(e).__name__}: {e}"
+        return result
+
+
+class _NullCtx:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *a):
+        return False
+
+
+async def _arrivals(requests, rate: float):
+    """Poisson arrivals. rate == inf fires everything at once (max-throughput mode)."""
+    for r in requests:
+        yield r
+        if rate == float("inf"):
+            continue
+        await asyncio.sleep(random.expovariate(rate))
+
+
