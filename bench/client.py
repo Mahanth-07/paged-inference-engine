@@ -277,3 +277,24 @@ def main():
     ap.add_argument("--num-prompts", type=int, default=500)
     ap.add_argument("--input-len", type=int, default=512)
     ap.add_argument("--output-len", type=int, default=128)
+    ap.add_argument("--fixed-output", action="store_true", default=True,
+                    help="Pin every request to --output-len. Required for a fair "
+                         "cross-system comparison; on by default for that reason.")
+    ap.add_argument("--variable-output", dest="fixed_output", action="store_false")
+    ap.add_argument("--request-rate", type=float, default=float("inf"))
+    ap.add_argument("--max-concurrency", type=int, default=None)
+    ap.add_argument("--warmup", type=int, default=10)
+    ap.add_argument("--timeout", type=float, default=1800.0)
+    ap.add_argument("--ttft-slo-ms", type=float, default=500.0)
+    ap.add_argument("--tpot-slo-ms", type=float, default=50.0)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--out", default=None)
+    args = ap.parse_args()
+
+    random.seed(args.seed)
+    try:
+        import uvloop
+
+        uvloop.install()
+    except ImportError:
+        pass
