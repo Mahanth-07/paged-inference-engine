@@ -216,3 +216,23 @@ def summarize(results: list[RequestResult], duration: float, args) -> dict:
     if not ok:
         return {"error": "all requests failed",
                 "sample_errors": [r.error for r in failed[:5]]}
+
+    ttfts = [r.ttft * 1000 for r in ok]
+    itls = [x * 1000 for r in ok for x in r.itls]
+    e2els = [r.latency * 1000 for r in ok]
+    # TPOT: steady-state per-token cost, so it excludes the prefill (hence output_len-1)
+    tpots = [(r.latency - r.ttft) * 1000 / (r.output_len - 1) for r in ok if r.output_len > 1]
+    out_tokens = sum(r.output_len for r in ok)
+    in_tokens = sum(r.prompt_len for r in ok)
+
+    def dist(name, xs):
+        return {f"mean_{name}_ms": sum(xs) / len(xs) if xs else float("nan"),
+                f"median_{name}_ms": percentile(xs, 50),
+                f"p90_{name}_ms": percentile(xs, 90),
+                f"p99_{name}_ms": percentile(xs, 99)}
+
+    good = sum(1 for r in ok
+               if r.ttft * 1000 <= args.ttft_slo_ms
+               and r.output_len > 1
+               and (r.latency - r.ttft) * 1000 / (r.output_len - 1) <= args.tpot_slo_ms)
+
