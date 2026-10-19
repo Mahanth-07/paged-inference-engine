@@ -257,3 +257,23 @@ def summarize(results: list[RequestResult], duration: float, args) -> dict:
     s.update(dist("e2el", e2els))
     if failed:
         s["sample_errors"] = [r.error for r in failed[:3]]
+    return s
+
+
+def _get_tokenizer(model: str):
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(model)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--backend", default="paged-inference-engine", choices=["paged-inference-engine", "vllm", "tgi"])
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--model", default="meta-llama/Llama-3.2-1B-Instruct")
+    ap.add_argument("--dataset", default="sharegpt", choices=["sharegpt", "synthetic"])
+    ap.add_argument("--dataset-path", default="data/ShareGPT_V3_unfiltered_cleaned_split.json")
+    ap.add_argument("--num-prompts", type=int, default=500)
+    ap.add_argument("--input-len", type=int, default=512)
+    ap.add_argument("--output-len", type=int, default=128)
