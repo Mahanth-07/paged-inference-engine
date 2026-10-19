@@ -195,3 +195,24 @@ async def run_benchmark(args) -> dict:
     async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
         if warmup:
             await asyncio.gather(*[
+                send_openai_completion(session, url, args.model, p, min(o, 16), pl)
+                for p, pl, o in warmup
+            ])
+
+        tasks = []
+        bench_start = time.perf_counter()
+        async for prompt, plen, olen in _arrivals(requests, args.request_rate):
+            tasks.append(asyncio.create_task(send_openai_completion(
+                session, url, args.model, prompt, olen, plen, sem)))
+        results = await asyncio.gather(*tasks)
+        duration = time.perf_counter() - bench_start
+
+    return summarize(results, duration, args)
+
+
+def summarize(results: list[RequestResult], duration: float, args) -> dict:
+    ok = [r for r in results if r.success]
+    failed = [r for r in results if not r.success]
+    if not ok:
+        return {"error": "all requests failed",
+                "sample_errors": [r.error for r in failed[:5]]}
