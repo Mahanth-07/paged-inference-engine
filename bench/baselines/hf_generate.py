@@ -27,3 +27,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import random
+import time
+
+
+def build_prompts(args, tokenizer):
+    if args.dataset == "sharegpt":
+        from bench.client import load_sharegpt
+
+        data = load_sharegpt(args.dataset_path, args.num_prompts, tokenizer, args.seed,
+                             fixed_output_len=args.output_len if args.fixed_output else None)
+    else:
+        from bench.client import synthetic
+
+        data = synthetic(args.num_prompts, args.input_len, args.output_len,
+                         tokenizer, args.seed)
+    return data
+
+
+def main():
+    import torch
