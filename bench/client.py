@@ -174,3 +174,24 @@ async def _arrivals(requests, rate: float):
         await asyncio.sleep(random.expovariate(rate))
 
 
+async def run_benchmark(args) -> dict:
+    import aiohttp
+
+    tokenizer = _get_tokenizer(args.model)
+    if args.dataset == "sharegpt":
+        data = load_sharegpt(args.dataset_path, args.num_prompts + args.warmup,
+                             tokenizer, args.seed,
+                             fixed_output_len=args.output_len if args.fixed_output else None)
+    else:
+        data = synthetic(args.num_prompts + args.warmup, args.input_len,
+                         args.output_len, tokenizer, args.seed)
+
+    warmup, requests = data[:args.warmup], data[args.warmup:]
+    url = f"http://{args.host}:{args.port}/v1/completions"
+    sem = asyncio.Semaphore(args.max_concurrency) if args.max_concurrency else None
+    conn = aiohttp.TCPConnector(limit=0, limit_per_host=0)
+    timeout = aiohttp.ClientTimeout(total=args.timeout)
+
+    async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
+        if warmup:
+            await asyncio.gather(*[
