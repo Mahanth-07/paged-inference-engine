@@ -236,3 +236,24 @@ def summarize(results: list[RequestResult], duration: float, args) -> dict:
                and r.output_len > 1
                and (r.latency - r.ttft) * 1000 / (r.output_len - 1) <= args.tpot_slo_ms)
 
+    s = {
+        "num_requests": len(ok),
+        "num_failed": len(failed),
+        "duration_s": duration,
+        "request_throughput_rps": len(ok) / duration,
+        "output_throughput_tok_s": out_tokens / duration,
+        "total_throughput_tok_s": (in_tokens + out_tokens) / duration,
+        "total_input_tokens": in_tokens,
+        "total_output_tokens": out_tokens,
+        # Goodput is the metric that actually matters for a serving system: throughput
+        # you can bill for, i.e. that met the SLO. Reporting it puts you ahead of most.
+        "goodput_rps": good / duration,
+        "ttft_slo_ms": args.ttft_slo_ms,
+        "tpot_slo_ms": args.tpot_slo_ms,
+    }
+    s.update(dist("ttft", ttfts))
+    s.update(dist("tpot", tpots))
+    s.update(dist("itl", itls))
+    s.update(dist("e2el", e2els))
+    if failed:
+        s["sample_errors"] = [r.error for r in failed[:3]]
