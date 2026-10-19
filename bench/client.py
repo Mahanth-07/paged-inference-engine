@@ -298,3 +298,15 @@ def main():
         uvloop.install()
     except ImportError:
         pass
+
+    result = asyncio.run(run_benchmark(args))
+    result["args"] = {k: v for k, v in vars(args).items()}
+    print(json.dumps(result, indent=2))
+    if args.out:
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w") as f:
+            json.dump(result, f, indent=2)
+
+
+if __name__ == "__main__":
+    main()
