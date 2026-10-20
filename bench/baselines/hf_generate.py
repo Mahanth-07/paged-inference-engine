@@ -171,3 +171,14 @@ def main():
 
     print(json.dumps(summary, indent=2))
     print(f"\n>>> batch utilization {summary['batch_utilization']:.1%} -- the fraction of "
+          f"batch slot-steps that produced a real token.\n"
+          f"    Everything else is a finished sequence occupying a slot. That is the gap "
+          f"continuous batching closes.")
+    if args.out:
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w") as f:
+            json.dump(summary, f, indent=2)
+
+
+if __name__ == "__main__":
+    main()
