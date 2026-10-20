@@ -110,3 +110,23 @@ def main():
         # some members finished long before. This IS the inefficiency being measured.
         steps = max(out_lens)
         enc = tokenizer(prompts, return_tensors="pt", padding=True).to("cuda")
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        with torch.inference_mode():
+            model.generate(**enc, max_new_tokens=steps, min_new_tokens=steps, **gen_kwargs)
+        torch.cuda.synchronize()
+        dt = time.perf_counter() - t0
+
+        batch_utils.append(sum(out_lens) / (len(batch) * steps))
+        total_out += sum(out_lens)
+        total_in += sum(pl for _, pl, _ in batch)
+        for (_, plen, olen) in batch:
+            # Every member of a static batch waits for the whole batch: its E2E latency
+            # is the batch's wall time, and its "TTFT" is the prefill of the widest
+            # padded prompt. That is the honest accounting, and it is why static
+            # batching loses on tail latency even before it loses on throughput.
+            per_request.append({"prompt_len": plen, "output_len": olen,
+                                "latency_ms": dt * 1000,
+                                "ttft_ms": dt * 1000 / steps,
+                                "tpot_ms": dt * 1000 / max(1, steps - 1)})
+    duration = time.perf_counter() - t_start
