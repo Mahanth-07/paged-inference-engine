@@ -151,3 +151,23 @@ def main():
         "num_failed": 0,
         "duration_s": duration,
         "request_throughput_rps": len(per_request) / duration,
+        "output_throughput_tok_s": total_out / duration,
+        "total_throughput_tok_s": (total_in + total_out) / duration,
+        "total_input_tokens": total_in,
+        "total_output_tokens": total_out,
+        "goodput_rps": good / duration,
+        "ttft_slo_ms": args.ttft_slo_ms,
+        "tpot_slo_ms": args.tpot_slo_ms,
+        # The headline for this baseline: how much of the batch was doing useful work.
+        "batch_utilization": sum(batch_utils) / len(batch_utils),
+        "peak_memory_gib": peak / 2 ** 30,
+        "kv_bytes_per_served_token": peak / max(1, total_out),
+    }
+    summary.update(dist("ttft", ttfts))
+    summary.update(dist("tpot", tpots))
+    summary.update(dist("itl", tpots))    # static batching has no per-token stream
+    summary.update(dist("e2el", e2els))
+    summary["args"] = vars(args)
+
+    print(json.dumps(summary, indent=2))
+    print(f"\n>>> batch utilization {summary['batch_utilization']:.1%} -- the fraction of "
