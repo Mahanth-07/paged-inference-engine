@@ -48,3 +48,24 @@ def make_fixture(num_seqs, context_len, num_heads, num_kv_heads, head_dim,
     return query, k_cache, v_cache, block_tables, context_lens
 
 
+def timeit(fn, warmup=10, iters=50):
+    for _ in range(warmup):
+        fn()
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    for _ in range(iters):
+        fn()
+    torch.cuda.synchronize()
+    return (time.perf_counter() - t0) / iters
+
+
+def peak_bandwidth(device) -> float:
+    """Measured, not datasheet. A big device-to-device copy is the practical ceiling."""
+    x = torch.empty(1 << 27, dtype=torch.float16, device=device)
+    y = torch.empty_like(x)
+    for _ in range(3):
+        y.copy_(x)
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    n = 30
+    for _ in range(n):
