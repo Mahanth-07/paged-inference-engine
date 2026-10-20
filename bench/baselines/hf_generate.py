@@ -68,3 +68,24 @@ def main():
     ap.add_argument("--ttft-slo-ms", type=float, default=500.0)
     ap.add_argument("--tpot-slo-ms", type=float, default=50.0)
     ap.add_argument("--out", default=None)
+    args = ap.parse_args()
+
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    dtype = getattr(torch, args.dtype)
+
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"     # right padding corrupts generation
+
+    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=dtype).cuda().eval()
+    gen_kwargs = dict(do_sample=False, temperature=None, top_p=None,
+                      pad_token_id=tokenizer.pad_token_id)
+    if args.mode == "static_cache_compile":
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead",
+                                      fullgraph=True)
+
+    data = build_prompts(args, tokenizer)
+    torch.cuda.reset_peak_memory_stats()
