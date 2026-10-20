@@ -130,3 +130,24 @@ def main():
                                 "ttft_ms": dt * 1000 / steps,
                                 "tpot_ms": dt * 1000 / max(1, steps - 1)})
     duration = time.perf_counter() - t_start
+
+    from paged_inference_engine.utils.metrics import percentile
+
+    def dist(name, xs):
+        return {f"mean_{name}_ms": sum(xs) / len(xs),
+                f"median_{name}_ms": percentile(xs, 50),
+                f"p90_{name}_ms": percentile(xs, 90),
+                f"p99_{name}_ms": percentile(xs, 99)}
+
+    ttfts = [r["ttft_ms"] for r in per_request]
+    tpots = [r["tpot_ms"] for r in per_request]
+    e2els = [r["latency_ms"] for r in per_request]
+    good = sum(1 for r in per_request
+               if r["ttft_ms"] <= args.ttft_slo_ms and r["tpot_ms"] <= args.tpot_slo_ms)
+
+    peak = torch.cuda.max_memory_allocated()
+    summary = {
+        "num_requests": len(per_request),
+        "num_failed": 0,
+        "duration_s": duration,
+        "request_throughput_rps": len(per_request) / duration,
