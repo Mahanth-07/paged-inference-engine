@@ -48,3 +48,23 @@ def build_prompts(args, tokenizer):
 
 def main():
     import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="meta-llama/Llama-3.2-1B-Instruct")
+    ap.add_argument("--mode", default="static", choices=["static", "static_cache_compile"])
+    ap.add_argument("--batch-size", type=int, default=32)
+    ap.add_argument("--num-prompts", type=int, default=500)
+    ap.add_argument("--dataset", default="sharegpt", choices=["sharegpt", "synthetic"])
+    ap.add_argument("--dataset-path",
+                    default="data/ShareGPT_V3_unfiltered_cleaned_split.json")
+    ap.add_argument("--input-len", type=int, default=512)
+    ap.add_argument("--output-len", type=int, default=128)
+    ap.add_argument("--fixed-output", action="store_true", default=True)
+    ap.add_argument("--variable-output", dest="fixed_output", action="store_false")
+    ap.add_argument("--dtype", default="bfloat16")
+    ap.add_argument("--max-model-len", type=int, default=4096)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--ttft-slo-ms", type=float, default=500.0)
+    ap.add_argument("--tpot-slo-ms", type=float, default=50.0)
+    ap.add_argument("--out", default=None)
