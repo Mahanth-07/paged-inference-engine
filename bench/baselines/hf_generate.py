@@ -89,3 +89,24 @@ def main():
 
     data = build_prompts(args, tokenizer)
     torch.cuda.reset_peak_memory_stats()
+
+    # ---- warmup (compile + alloc costs are real but not the steady state) ----
+    warm = data[:2]
+    enc = tokenizer([p for p, _, _ in warm], return_tensors="pt", padding=True).to("cuda")
+    with torch.inference_mode():
+        model.generate(**enc, max_new_tokens=8, min_new_tokens=8, **gen_kwargs)
+    torch.cuda.synchronize()
+
+    # ---- the run ----
+    per_request = []
+    batch_utils = []
+    total_out = total_in = 0
+    t_start = time.perf_counter()
+    for i in range(0, len(data), args.batch_size):
+        batch = data[i:i + args.batch_size]
+        prompts = [p for p, _, _ in batch]
+        out_lens = [o for _, _, o in batch]
+        # Static batching: the whole batch runs for max(out_lens) steps, no matter that
+        # some members finished long before. This IS the inefficiency being measured.
+        steps = max(out_lens)
+        enc = tokenizer(prompts, return_tensors="pt", padding=True).to("cuda")
