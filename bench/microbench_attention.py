@@ -69,3 +69,23 @@ def peak_bandwidth(device) -> float:
     t0 = time.perf_counter()
     n = 30
     for _ in range(n):
+        y.copy_(x)
+    torch.cuda.synchronize()
+    dt = time.perf_counter() - t0
+    return 2 * x.numel() * 2 * n / dt / 1e9
+
+
+def bench_decode(args):
+    device, dtype = "cuda", torch.float16
+    scale = args.head_dim ** -0.5
+    peak = peak_bandwidth(device)
+    print(f"measured peak HBM bandwidth: {peak:.0f} GB/s "
+          f"({torch.cuda.get_device_name(0)})\n")
+
+    hdr = (f"{'batch':>6} {'ctx':>7} {'backend':>18} {'us':>9} {'GB/s':>9} {'%peak':>7}")
+    print(hdr)
+    print("-" * len(hdr))
+
+    for batch in args.batch:
+        for ctx in args.context:
+            q, kc, vc, bt, cl = make_fixture(
