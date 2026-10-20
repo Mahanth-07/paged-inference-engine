@@ -27,3 +27,24 @@ from paged_inference_engine.kernels.paged_attention_triton import (
     paged_attention_decode,
     paged_attention_prefill,
     reference_paged_attention_decode,
+)
+
+
+def make_fixture(num_seqs, context_len, num_heads, num_kv_heads, head_dim,
+                 block_size, dtype, device, seed=0):
+    """Blocks are SHUFFLED on purpose. A fixture with contiguous block ids passes even
+    with a completely broken block-table lookup, which defeats the point."""
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    pages_per_seq = (context_len + block_size - 1) // block_size
+    num_blocks = pages_per_seq * num_seqs + 8
+    perm = torch.randperm(num_blocks, generator=g)[:pages_per_seq * num_seqs]
+    block_tables = perm.view(num_seqs, pages_per_seq).to(torch.int32).to(device)
+
+    k_cache = torch.randn(num_blocks, block_size, num_kv_heads, head_dim,
+                          dtype=dtype, device=device)
+    v_cache = torch.randn_like(k_cache)
+    query = torch.randn(num_seqs, num_heads, head_dim, dtype=dtype, device=device)
+    context_lens = torch.full((num_seqs,), context_len, dtype=torch.int32, device=device)
+    return query, k_cache, v_cache, block_tables, context_lens
+
+
