@@ -110,3 +110,24 @@ def bench_decode(args):
 
                 cands["flash_attn"] = lambda: flash_attn_with_kvcache(
                     q.unsqueeze(1), kc, vc, cache_seqlens=cl, block_table=bt,
+                    softmax_scale=scale, causal=True)
+            except ImportError:
+                pass
+            if args.include_naive:
+                cands["naive (oracle)"] = lambda: reference_paged_attention_decode(
+                    q, kc, vc, bt, cl, scale)
+
+            for name, fn in cands.items():
+                try:
+                    dt = timeit(fn, iters=args.iters)
+                except Exception as e:  # noqa: BLE001
+                    print(f"{batch:>6} {ctx:>7} {name:>18}  FAILED: {type(e).__name__}: {e}")
+                    continue
+                gbs = kv_bytes / dt / 1e9
+                print(f"{batch:>6} {ctx:>7} {name:>18} {dt*1e6:>9.1f} {gbs:>9.0f} "
+                      f"{100*gbs/peak:>6.1f}%")
+        print()
+
+
+def _flashinfer_decode_fn(q, kc, vc, bt, cl, args, scale, device, dtype):
+    import flashinfer
