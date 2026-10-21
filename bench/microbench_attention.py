@@ -192,3 +192,10 @@ def main():
     if not torch.cuda.is_available():
         raise SystemExit("needs a GPU -- this is the part you rent a box for")
     if args.prefill:
+        bench_prefill(args)
+    else:
+        bench_decode(args)
+
+
+if __name__ == "__main__":
+    main()
