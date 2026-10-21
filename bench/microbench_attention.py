@@ -151,3 +151,24 @@ def bench_prefill(args):
     scale = args.head_dim ** -0.5
     print(f"{'seqs':>6} {'qlen':>7} {'backend':>18} {'ms':>9} {'TFLOP/s':>9}")
     print("-" * 52)
+    for n in args.batch:
+        for qlen in args.context:
+            pages = (qlen + args.block_size - 1) // args.block_size
+            num_blocks = pages * n + 8
+            bt = torch.randperm(num_blocks)[:pages * n].view(n, pages).to(torch.int32).to(device)
+            kc = torch.randn(num_blocks, args.block_size, args.num_kv_heads,
+                             args.head_dim, dtype=dtype, device=device)
+            vc = torch.randn_like(kc)
+            q = torch.randn(n * qlen, args.num_heads, args.head_dim, dtype=dtype, device=device)
+            cl = torch.full((n,), qlen, dtype=torch.int32, device=device)
+            ql = torch.full((n,), qlen, dtype=torch.int32, device=device)
+            indptr = torch.arange(0, (n + 1) * qlen, qlen, dtype=torch.int32, device=device)
+            # causal: half the full q*k matrix
+            flops = 2 * 2 * n * qlen * qlen * args.num_heads * args.head_dim / 2
+            try:
+                dt = timeit(lambda: paged_attention_prefill(
+                    q, kc, vc, bt, cl, ql, indptr, scale), iters=args.iters)
+                print(f"{n:>6} {qlen:>7} {'triton':>18} {dt*1e3:>9.3f} "
+                      f"{flops/dt/1e12:>9.1f}")
+            except Exception as e:  # noqa: BLE001
+                print(f"{n:>6} {qlen:>7} {'triton':>18}  FAILED: {e}")
