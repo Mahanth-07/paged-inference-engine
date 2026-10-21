@@ -172,3 +172,23 @@ def bench_prefill(args):
                       f"{flops/dt/1e12:>9.1f}")
             except Exception as e:  # noqa: BLE001
                 print(f"{n:>6} {qlen:>7} {'triton':>18}  FAILED: {e}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--batch", type=int, nargs="+", default=[1, 8, 64, 256])
+    ap.add_argument("--context", type=int, nargs="+", default=[512, 4096, 16384])
+    ap.add_argument("--num-heads", type=int, default=32)
+    ap.add_argument("--num-kv-heads", type=int, default=8)
+    ap.add_argument("--head-dim", type=int, default=64)
+    ap.add_argument("--block-size", type=int, default=16)
+    ap.add_argument("--iters", type=int, default=50)
+    ap.add_argument("--include-naive", action="store_true",
+                    help="Include the O(context) gather oracle. Slow; illustrative.")
+    ap.add_argument("--prefill", action="store_true")
+    ap.add_argument("--roofline", action="store_true", help="(implied; always reported)")
+    args = ap.parse_args()
+
+    if not torch.cuda.is_available():
+        raise SystemExit("needs a GPU -- this is the part you rent a box for")
+    if args.prefill:
