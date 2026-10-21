@@ -131,3 +131,23 @@ def bench_decode(args):
 
 def _flashinfer_decode_fn(q, kc, vc, bt, cl, args, scale, device, dtype):
     import flashinfer
+
+    ws = torch.empty(128 * 1024 * 1024, dtype=torch.uint8, device=device)
+    wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(ws, "NHD")
+    pages = bt.shape[1]
+    indptr = torch.arange(0, (bt.shape[0] + 1) * pages, pages,
+                          dtype=torch.int32, device=device)
+    indices = bt.reshape(-1).contiguous()
+    last = torch.full((bt.shape[0],),
+                      int(cl[0]) - (pages - 1) * args.block_size,
+                      dtype=torch.int32, device=device)
+    wrapper.plan(indptr, indices, last, args.num_heads, args.num_kv_heads,
+                 args.head_dim, args.block_size, q_data_type=dtype)
+    return lambda: wrapper.run(q, (kc, vc))
+
+
+def bench_prefill(args):
+    device, dtype = "cuda", torch.float16
+    scale = args.head_dim ** -0.5
+    print(f"{'seqs':>6} {'qlen':>7} {'backend':>18} {'ms':>9} {'TFLOP/s':>9}")
+    print("-" * 52)
