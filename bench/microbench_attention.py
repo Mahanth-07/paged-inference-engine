@@ -89,3 +89,24 @@ def bench_decode(args):
     for batch in args.batch:
         for ctx in args.context:
             q, kc, vc, bt, cl = make_fixture(
+                batch, ctx, args.num_heads, args.num_kv_heads, args.head_dim,
+                args.block_size, dtype, device)
+            kv_bytes = batch * ctx * args.num_kv_heads * args.head_dim * 2 * 2
+
+            cands = {
+                "triton (v1)": lambda: paged_attention_decode(q, kc, vc, bt, cl, scale,
+                                                              split_k=1),
+                "triton (split-K)": lambda: paged_attention_decode(q, kc, vc, bt, cl, scale),
+            }
+            try:
+                import flashinfer  # noqa: F401
+
+                cands["flashinfer"] = _flashinfer_decode_fn(
+                    q, kc, vc, bt, cl, args, scale, device, dtype)
+            except ImportError:
+                pass
+            try:
+                from flash_attn import flash_attn_with_kvcache
+
+                cands["flash_attn"] = lambda: flash_attn_with_kvcache(
+                    q.unsqueeze(1), kc, vc, cache_seqlens=cl, block_table=bt,
