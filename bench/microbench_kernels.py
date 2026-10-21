@@ -11,3 +11,24 @@ The honest way to present them is per-step cost, which is what the last column d
 from __future__ import annotations
 
 import argparse
+import time
+
+import torch
+
+from paged_inference_engine.kernels import cache_ops, fused
+
+
+def timeit(fn, warmup=20, iters=200):
+    for _ in range(warmup):
+        fn()
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    for _ in range(iters):
+        fn()
+    torch.cuda.synchronize()
+    return (time.perf_counter() - t0) / iters
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--num-tokens", type=int, nargs="+", default=[1, 8, 64, 512, 8192])
