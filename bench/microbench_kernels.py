@@ -32,3 +32,24 @@ def timeit(fn, warmup=20, iters=200):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--num-tokens", type=int, nargs="+", default=[1, 8, 64, 512, 8192])
+    ap.add_argument("--hidden", type=int, default=2048)
+    ap.add_argument("--intermediate", type=int, default=8192)
+    ap.add_argument("--num-heads", type=int, default=32)
+    ap.add_argument("--num-kv-heads", type=int, default=8)
+    ap.add_argument("--head-dim", type=int, default=64)
+    ap.add_argument("--num-layers", type=int, default=16)
+    ap.add_argument("--block-size", type=int, default=16)
+    args = ap.parse_args()
+
+    if not torch.cuda.is_available():
+        raise SystemExit("needs a GPU")
+    dev, dt = "cuda", torch.bfloat16
+
+    hdr = (f"{'op':>20} {'tokens':>8} {'torch us':>10} {'triton us':>10} "
+           f"{'speedup':>8} {'us/step saved':>14}")
+    print(hdr)
+    print("-" * len(hdr))
+    per_step = {"rms_norm": 2, "silu_and_mul": 1, "rope": 1, "reshape_and_cache": 1}
+
+    for n in args.num_tokens:
+        x = torch.randn(n, args.hidden, dtype=dt, device=dev)
