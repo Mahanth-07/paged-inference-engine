@@ -14,3 +14,24 @@ import glob
 import json
 import os
 import re
+from collections import defaultdict
+
+FIGURES = {
+    "throughput_vs_latency": "Output throughput (tok/s) vs p99 TTFT (ms), per system",
+    "itl_cdf": "ITL distribution at a fixed rate -- chunked prefill's effect on stalls",
+    "block_size_ablation": "Block size vs throughput and KV-cache utilization",
+    "cuda_graph_ablation": "Step latency vs batch size, graphs on/off",
+    "batching_ablation": "Continuous vs static batching at matched output-length variance",
+}
+
+STYLE = {
+    "paged-inference-engine": dict(color="#1f77b4", marker="o"),
+    "vllm": dict(color="#d62728", marker="s"),
+    "hf_static": dict(color="#7f7f7f", marker="^"),
+    "hf_compile": dict(color="#bcbd22", marker="v"),
+    "paged-inference-engine-nopaging": dict(color="#9467bd", marker="D"),
+}
+
+
+def load_results(results_dir: str) -> dict:
+    """Group results/{system}_rate{r}_rep{n}.json by system and request rate."""
