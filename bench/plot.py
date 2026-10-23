@@ -35,3 +35,24 @@ STYLE = {
 
 def load_results(results_dir: str) -> dict:
     """Group results/{system}_rate{r}_rep{n}.json by system and request rate."""
+    grouped: dict = defaultdict(lambda: defaultdict(list))
+    for path in sorted(glob.glob(os.path.join(results_dir, "*.json"))):
+        m = re.match(r"(?P<sys>[a-z_0-9-]+)_rate(?P<rate>[\d.]+|inf)_rep(?P<rep>\d+)\.json",
+                     os.path.basename(path))
+        if not m:
+            continue
+        with open(path) as f:
+            payload = json.load(f)
+        if "error" in payload:
+            continue
+        grouped[m["sys"]][m["rate"]].append(payload)
+    return grouped
+
+
+def _median(xs):
+    xs = sorted(xs)
+    n = len(xs)
+    return xs[n // 2] if n % 2 else 0.5 * (xs[n // 2 - 1] + xs[n // 2])
+
+
+def plot_throughput_vs_latency(grouped, out_dir, slo_ms=500.0):
