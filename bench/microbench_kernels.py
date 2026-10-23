@@ -74,3 +74,23 @@ def main():
              lambda: fused.silu_and_mul(gate_up)),
             ("rope", lambda: fused.apply_rope_torch(q, k, cos, sin),
              lambda: fused.apply_rope(q.clone(), k.clone(), cos, sin)),
+            ("reshape_and_cache",
+             lambda: _torch_cache(k, v, kc, vc, slots),
+             lambda: cache_ops.reshape_and_cache_triton(k, v, kc, vc, slots)),
+        ]
+        for name, torch_fn, triton_fn in cases:
+            try:
+                t_torch = timeit(torch_fn)
+                t_triton = timeit(triton_fn)
+            except Exception as e:  # noqa: BLE001
+                print(f"{name:>20} {n:>8}  FAILED: {type(e).__name__}: {e}")
+                continue
+            saved = (t_torch - t_triton) * per_step[name] * args.num_layers * 1e6
+            print(f"{name:>20} {n:>8} {t_torch*1e6:>10.1f} {t_triton*1e6:>10.1f} "
+                  f"{t_torch/t_triton:>7.2f}x {saved:>13.1f}")
+        print()
+
+
+def _torch_cache(k, v, kc, vc, slots):
+    from paged_inference_engine.layers.attention import reshape_and_cache_torch
+
