@@ -53,3 +53,24 @@ def main():
 
     for n in args.num_tokens:
         x = torch.randn(n, args.hidden, dtype=dt, device=dev)
+        res = torch.randn_like(x)
+        w = torch.randn(args.hidden, dtype=dt, device=dev)
+        gate_up = torch.randn(n, 2 * args.intermediate, dtype=dt, device=dev)
+        q = torch.randn(n, args.num_heads, args.head_dim, dtype=dt, device=dev)
+        k = torch.randn(n, args.num_kv_heads, args.head_dim, dtype=dt, device=dev)
+        v = torch.randn_like(k)
+        cos = torch.randn(n, args.head_dim // 2, dtype=dt, device=dev)
+        sin = torch.randn_like(cos)
+        nb = max(4, (n + args.block_size - 1) // args.block_size + 2)
+        kc = torch.zeros(nb, args.block_size, args.num_kv_heads, args.head_dim,
+                         dtype=dt, device=dev)
+        vc = torch.zeros_like(kc)
+        slots = torch.randperm(nb * args.block_size, device=dev)[:n].to(torch.int64)
+
+        cases = [
+            ("rms_norm", lambda: fused.fused_add_rms_norm_torch(x, res.clone(), w, 1e-5),
+             lambda: fused.fused_add_rms_norm(x, res.clone(), w, 1e-5)),
+            ("silu_and_mul", lambda: fused.silu_and_mul_torch(gate_up),
+             lambda: fused.silu_and_mul(gate_up)),
+            ("rope", lambda: fused.apply_rope_torch(q, k, cos, sin),
+             lambda: fused.apply_rope(q.clone(), k.clone(), cos, sin)),
