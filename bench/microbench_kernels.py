@@ -94,3 +94,8 @@ def main():
 def _torch_cache(k, v, kc, vc, slots):
     from paged_inference_engine.layers.attention import reshape_and_cache_torch
 
+    reshape_and_cache_torch(k, v, kc, vc, slots)
+
+
+if __name__ == "__main__":
+    main()
