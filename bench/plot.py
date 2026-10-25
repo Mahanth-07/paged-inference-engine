@@ -56,3 +56,24 @@ def _median(xs):
 
 
 def plot_throughput_vs_latency(grouped, out_dir, slo_ms=500.0):
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    for system, by_rate in sorted(grouped.items()):
+        rates = sorted(by_rate, key=lambda r: float(r))
+        xs, ys, lo, hi = [], [], [], []
+        for rate in rates:
+            reps = by_rate[rate]
+            tp = [r["output_throughput_tok_s"] for r in reps]
+            lat = [r["p99_ttft_ms"] for r in reps]
+            xs.append(_median(tp))
+            ys.append(_median(lat))
+            lo.append(_median(lat) - min(lat))
+            hi.append(max(lat) - _median(lat))
+        st = STYLE.get(system, {})
+        ax.errorbar(xs, ys, yerr=[lo, hi], label=system, linewidth=2.5,
+                    markersize=9, capsize=4, **st)
+        for x, y, rate in zip(xs, ys, rates):
+            ax.annotate(f"{rate}", (x, y), textcoords="offset points",
+                        xytext=(6, -12), fontsize=9, alpha=0.75)
+
