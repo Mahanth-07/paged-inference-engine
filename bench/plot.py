@@ -160,3 +160,23 @@ def plot_ablation(results_dir, out_dir, prefix, xlabel, title, name, cast=str):
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5))
     labels = [k for k, _ in rows]
     a1.bar(labels, [p["output_throughput_tok_s"] for _, p in rows], color="#1f77b4")
+    a1.set_ylabel("Output throughput (tok/s)", fontsize=13)
+    a1.set_xlabel(xlabel, fontsize=13)
+    a2.bar(labels, [p["p99_itl_ms"] for _, p in rows], color="#d62728")
+    a2.set_ylabel("p99 ITL (ms)", fontsize=13)
+    a2.set_xlabel(xlabel, fontsize=13)
+    for ax in (a1, a2):
+        ax.grid(alpha=0.3, axis="y")
+        ax.tick_params(labelsize=11)
+    fig.suptitle(title, fontsize=15)
+    fig.tight_layout()
+    path = os.path.join(out_dir, f"{name}.png")
+    fig.savefig(path, dpi=160)
+    print(f"wrote {path}")
+
+
+def write_table(grouped, out_path):
+    """Markdown table for BENCHMARKS.md. The graph is the headline; this is the receipt."""
+    cols = ["output_throughput_tok_s", "request_throughput_rps", "goodput_rps",
+            "median_ttft_ms", "p99_ttft_ms", "median_tpot_ms", "p99_itl_ms"]
+    head = ("| system | rate | " + " | ".join(c.replace("_", " ") for c in cols) + " |\n"
