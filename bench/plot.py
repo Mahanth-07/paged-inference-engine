@@ -139,3 +139,24 @@ def plot_itl_cdf(grouped, out_dir):
     print(f"wrote {path}")
 
 
+def plot_ablation(results_dir, out_dir, prefix, xlabel, title, name, cast=str):
+    import matplotlib.pyplot as plt
+
+    rows = []
+    for path in sorted(glob.glob(os.path.join(results_dir, f"ablation_{prefix}*.json"))):
+        key = os.path.basename(path)[len(f"ablation_{prefix}"):-5]
+        with open(path) as f:
+            payload = json.load(f)
+        if "error" in payload:
+            continue
+        rows.append((key, payload))
+    if not rows:
+        return
+    try:
+        rows.sort(key=lambda kv: float(kv[0]))
+    except ValueError:
+        rows.sort()
+
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5))
+    labels = [k for k, _ in rows]
+    a1.bar(labels, [p["output_throughput_tok_s"] for _, p in rows], color="#1f77b4")
