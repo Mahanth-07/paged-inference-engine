@@ -97,3 +97,24 @@ def plot_throughput_vs_latency(grouped, out_dir, slo_ms=500.0):
 
     # The headline sentence: where each curve crosses the SLO line.
     for system, by_rate in sorted(grouped.items()):
+        best = 0.0
+        for rate, reps in by_rate.items():
+            if _median([r["p99_ttft_ms"] for r in reps]) <= slo_ms:
+                best = max(best, _median([r["output_throughput_tok_s"] for r in reps]))
+        print(f"  {system:<20} sustains {best:8.1f} tok/s under a "
+              f"{slo_ms:.0f} ms p99 TTFT SLO")
+
+
+def plot_itl_cdf(grouped, out_dir):
+    """Percentile curve of ITL. The mean hides exactly the stalls chunked prefill fixes."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    pcts = [50, 75, 90, 95, 99]
+    drew = False
+    for system, by_rate in sorted(grouped.items()):
+        mid = sorted(by_rate, key=lambda r: float(r))
+        if not mid:
+            continue
+        rate = mid[len(mid) // 2]
+        reps = by_rate[rate]
