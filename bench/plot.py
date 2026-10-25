@@ -77,3 +77,23 @@ def plot_throughput_vs_latency(grouped, out_dir, slo_ms=500.0):
             ax.annotate(f"{rate}", (x, y), textcoords="offset points",
                         xytext=(6, -12), fontsize=9, alpha=0.75)
 
+    ax.axhline(slo_ms, color="k", linestyle="--", linewidth=1.5, alpha=0.6)
+    ax.text(ax.get_xlim()[0], slo_ms * 1.06, f" p99 TTFT SLO = {slo_ms:.0f} ms",
+            fontsize=11, alpha=0.8)
+    # Log y: latency spans orders of magnitude as the system approaches saturation,
+    # and the interesting part -- the knee -- is invisible on a linear axis.
+    ax.set_yscale("log")
+    ax.set_xlabel("Output throughput (tokens/s)", fontsize=14)
+    ax.set_ylabel("p99 TTFT (ms, log scale)", fontsize=14)
+    ax.set_title("Throughput vs tail latency\n(points labelled with request rate, req/s)",
+                 fontsize=15)
+    ax.grid(alpha=0.3, which="both")
+    ax.legend(fontsize=12)
+    ax.tick_params(labelsize=12)
+    fig.tight_layout()
+    path = os.path.join(out_dir, "throughput_vs_latency.png")
+    fig.savefig(path, dpi=160)
+    print(f"wrote {path}")
+
+    # The headline sentence: where each curve crosses the SLO line.
+    for system, by_rate in sorted(grouped.items()):
