@@ -118,3 +118,24 @@ def plot_itl_cdf(grouped, out_dir):
             continue
         rate = mid[len(mid) // 2]
         reps = by_rate[rate]
+        ys = [_median([r[f"p{p}_itl_ms"] for r in reps if f"p{p}_itl_ms" in r] or [float("nan")])
+              for p in pcts]
+        if all(y != y for y in ys):   # all NaN
+            continue
+        ax.plot(pcts, ys, label=f"{system} @ {rate} req/s", linewidth=2.5,
+                markersize=9, **STYLE.get(system, {}))
+        drew = True
+    if not drew:
+        return
+    ax.set_xlabel("Percentile", fontsize=14)
+    ax.set_ylabel("Inter-token latency (ms)", fontsize=14)
+    ax.set_title("ITL by percentile -- the tail is what users feel", fontsize=15)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=11)
+    ax.tick_params(labelsize=12)
+    fig.tight_layout()
+    path = os.path.join(out_dir, "itl_cdf.png")
+    fig.savefig(path, dpi=160)
+    print(f"wrote {path}")
+
+
