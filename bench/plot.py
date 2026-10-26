@@ -201,3 +201,24 @@ def main():
     os.makedirs(args.out, exist_ok=True)
 
     grouped = load_results(args.results)
+    if not grouped:
+        print(f"no rate-sweep results in {args.results}/ "
+              f"(expected {{system}}_rate{{r}}_rep{{n}}.json)")
+    else:
+        plot_throughput_vs_latency(grouped, args.out, args.slo_ms)
+        plot_itl_cdf(grouped, args.out)
+        write_table(grouped, os.path.join(args.results, "summary_table.md"))
+
+    plot_ablation(args.results, args.out, "blocksize", "block size (tokens)",
+                  "Block size ablation: fragmentation vs kernel efficiency",
+                  "block_size_ablation")
+    plot_ablation(args.results, args.out, "chunked", "chunked prefill",
+                  "Chunked prefill ablation: effect on ITL tail",
+                  "chunked_prefill_ablation")
+    plot_ablation(args.results, args.out, "graphs", "CUDA graphs",
+                  "CUDA graph ablation: launch overhead at low batch size",
+                  "cuda_graph_ablation")
+
+
+if __name__ == "__main__":
+    main()
