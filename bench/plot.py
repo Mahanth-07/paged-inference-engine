@@ -180,3 +180,24 @@ def write_table(grouped, out_path):
     cols = ["output_throughput_tok_s", "request_throughput_rps", "goodput_rps",
             "median_ttft_ms", "p99_ttft_ms", "median_tpot_ms", "p99_itl_ms"]
     head = ("| system | rate | " + " | ".join(c.replace("_", " ") for c in cols) + " |\n"
+            "|---" * (len(cols) + 2) + "|\n")
+    lines = [head]
+    for system, by_rate in sorted(grouped.items()):
+        for rate in sorted(by_rate, key=lambda r: float(r)):
+            reps = by_rate[rate]
+            vals = [f"{_median([r[c] for r in reps]):.1f}" for c in cols]
+            lines.append(f"| {system} | {rate} | " + " | ".join(vals) + " |\n")
+    with open(out_path, "w") as f:
+        f.writelines(lines)
+    print(f"wrote {out_path}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--results", default="results")
+    ap.add_argument("--out", default="docs/figures")
+    ap.add_argument("--slo-ms", type=float, default=500.0)
+    args = ap.parse_args()
+    os.makedirs(args.out, exist_ok=True)
+
+    grouped = load_results(args.results)
