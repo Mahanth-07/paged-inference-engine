@@ -39,3 +39,23 @@ wait_for_server() {
   for _ in $(seq 1 180); do
     curl -s "http://127.0.0.1:$1/health" >/dev/null 2>&1 && return 0
     sleep 2
+  done
+  echo "server on port $1 never came up" >&2; exit 1
+}
+
+kill_tree() { kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; sleep 5; }
+
+bench_system() {           # $1=name  $2=port
+  local name=$1 port=$2
+  for rep in $(seq 1 "$REPEATS"); do
+    for rate in $RATES; do
+      echo "=== $name  rate=$rate  rep=$rep ==="
+      python -m bench.client \
+        --backend "$name" --port "$port" --model "$MODEL" \
+        --dataset "$DATASET" --dataset-path "$DATASET_PATH" \
+        --num-prompts "$NUM_PROMPTS" \
+        --request-rate "$rate" --seed "$rep" \
+        --out "results/${name}_rate${rate}_rep${rep}.json"
+    done
+  done
+}
