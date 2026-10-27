@@ -19,3 +19,23 @@ GPU_UTIL=${GPU_UTIL:-0.90}
 MAX_LEN=${MAX_LEN:-4096}
 DTYPE=${DTYPE:-bfloat16}
 BACKEND=${BACKEND:-flashinfer}
+DATASET=${DATASET:-sharegpt}
+DATASET_PATH=${DATASET_PATH:-data/ShareGPT_V3_unfiltered_cleaned_split.json}
+mkdir -p results docs/figures
+
+echo "=== environment (record this in BENCHMARKS.md) ==="
+nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+python - <<'PY'
+import importlib, torch
+print(f"torch {torch.__version__} cuda {torch.version.cuda}")
+for m in ("triton", "flashinfer", "flash_attn", "vllm", "transformers"):
+    try:
+        print(f"{m} {importlib.import_module(m).__version__}")
+    except Exception:
+        print(f"{m} MISSING")
+PY
+
+wait_for_server() {
+  for _ in $(seq 1 180); do
+    curl -s "http://127.0.0.1:$1/health" >/dev/null 2>&1 && return 0
+    sleep 2
