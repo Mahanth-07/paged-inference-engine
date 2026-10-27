@@ -121,3 +121,9 @@ run_ablation "nopaging" --block-size "$MAX_LEN"
 
 # ---- 5. microbenchmarks and profiles --------------------------------------
 python -m bench.microbench_attention             | tee results/microbench_attention.txt
+python -m bench.microbench_attention --prefill   | tee results/microbench_prefill.txt
+python -m bench.microbench_kernels               | tee results/microbench_kernels.txt
+python scripts/profile.py breakdown              | tee results/step_breakdown.txt
+
+python -m bench.plot --results results --out docs/figures
+echo "done -- see docs/figures/ and results/summary_table.md"
