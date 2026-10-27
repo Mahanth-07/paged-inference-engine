@@ -101,3 +101,23 @@ ABL_PROMPTS=${ABL_PROMPTS:-300}
 
 run_ablation() {           # $1=tag  rest=server args
   local tag=$1; shift
+  local pid; pid=$(serve_engine "$@"); wait_for_server 8000
+  python -m bench.client --port 8000 --model "$MODEL" --request-rate "$ABL_RATE" \
+    --dataset "$DATASET" --dataset-path "$DATASET_PATH" \
+    --num-prompts "$ABL_PROMPTS" --out "results/ablation_${tag}.json"
+  kill_tree "$pid"
+}
+
+for bs in 8 16 32 64; do run_ablation "blocksize${bs}" --block-size "$bs"; done
+run_ablation "chunked_on"  --enable-chunked-prefill
+run_ablation "chunked_off" --no-chunked-prefill
+run_ablation "graphs_off"  --enforce-eager
+run_ablation "graphs_on"   --cuda-graphs --backend triton
+run_ablation "prefix_on"   --enable-prefix-caching
+
+# The cleanest possible ablation of paging itself: one giant block means every sequence
+# reserves max_model_len of KV up front, exactly like a non-paged engine.
+run_ablation "nopaging" --block-size "$MAX_LEN"
+
+# ---- 5. microbenchmarks and profiles --------------------------------------
+python -m bench.microbench_attention             | tee results/microbench_attention.txt
