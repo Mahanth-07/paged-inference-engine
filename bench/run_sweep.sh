@@ -80,3 +80,24 @@ if command -v vllm >/dev/null 2>&1; then
     --max-model-len "$MAX_LEN" --gpu-memory-utilization "$GPU_UTIL" \
     --disable-log-requests &
   VLLM_PID=$!
+  wait_for_server 8001
+  bench_system vllm 8001
+  kill_tree "$VLLM_PID"
+else
+  echo "!! vllm not installed -- skipping the comparison line that matters most"
+fi
+
+# ---- 3. HF generate baselines (offline) -----------------------------------
+python -m bench.baselines.hf_generate --model "$MODEL" --mode static --dtype "$DTYPE" \
+  --dataset "$DATASET" --dataset-path "$DATASET_PATH" \
+  --num-prompts "$NUM_PROMPTS" --out results/hf_static_rateinf_rep1.json
+python -m bench.baselines.hf_generate --model "$MODEL" --mode static_cache_compile \
+  --dtype "$DTYPE" --dataset "$DATASET" --dataset-path "$DATASET_PATH" \
+  --num-prompts "$NUM_PROMPTS" --out results/hf_compile_rateinf_rep1.json
+
+# ---- 4. ablations (all at one fixed, mid-load request rate) ---------------
+ABL_RATE=${ABL_RATE:-8}
+ABL_PROMPTS=${ABL_PROMPTS:-300}
+
+run_ablation() {           # $1=tag  rest=server args
+  local tag=$1; shift
