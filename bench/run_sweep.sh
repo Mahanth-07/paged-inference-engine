@@ -59,3 +59,24 @@ bench_system() {           # $1=name  $2=port
     done
   done
 }
+
+serve_engine() {        # extra args passed through
+  python -m paged_inference_engine.entrypoints.api_server \
+    --model "$MODEL" --port 8000 --backend "$BACKEND" --dtype "$DTYPE" \
+    --max-num-batched-tokens "$MAX_BATCHED" --max-num-seqs "$MAX_SEQS" \
+    --max-model-len "$MAX_LEN" --gpu-memory-utilization "$GPU_UTIL" "$@" &
+  echo $!
+}
+
+# ---- 1. paged-inference-engine ---------------------------------------------------------
+NS_PID=$(serve_engine); wait_for_server 8000
+bench_system paged-inference-engine 8000
+kill_tree "$NS_PID"
+
+# ---- 2. vLLM (the line you are measured against) --------------------------
+if command -v vllm >/dev/null 2>&1; then
+  vllm serve "$MODEL" --port 8001 --dtype "$DTYPE" \
+    --max-num-batched-tokens "$MAX_BATCHED" --max-num-seqs "$MAX_SEQS" \
+    --max-model-len "$MAX_LEN" --gpu-memory-utilization "$GPU_UTIL" \
+    --disable-log-requests &
+  VLLM_PID=$!
