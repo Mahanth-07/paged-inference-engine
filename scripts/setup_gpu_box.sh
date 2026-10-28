@@ -32,3 +32,23 @@ print(f"sm             {p.major}.{p.minor}   SMs {p.multi_processor_count}   VRA
 for m in ("triton", "flashinfer", "flash_attn", "vllm", "transformers"):
     try:
         print(f"{m:<14} {importlib.import_module(m).__version__}")
+    except Exception as e:
+        print(f"{m:<14} MISSING ({type(e).__name__})")
+PY
+
+echo "=== peak HBM bandwidth (your memory-bound roofline ceiling) ==="
+python - <<'PY'
+import torch, time
+x = torch.empty(1 << 28, dtype=torch.float16, device="cuda")  # 512 MiB
+y = torch.empty_like(x)
+for _ in range(3):
+    y.copy_(x)
+torch.cuda.synchronize()
+t = time.perf_counter()
+N = 50
+for _ in range(N):
+    y.copy_(x)
+torch.cuda.synchronize()
+dt = time.perf_counter() - t
+gbs = 2 * x.numel() * 2 * N / dt / 1e9  # read + write
+print(f"measured copy bandwidth: {gbs:.0f} GB/s")
