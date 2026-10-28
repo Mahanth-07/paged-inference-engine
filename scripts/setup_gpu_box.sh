@@ -52,3 +52,24 @@ torch.cuda.synchronize()
 dt = time.perf_counter() - t
 gbs = 2 * x.numel() * 2 * N / dt / 1e9  # read + write
 print(f"measured copy bandwidth: {gbs:.0f} GB/s")
+print("Report your decode kernel's achieved bandwidth as a fraction of this number.")
+PY
+
+echo "=== prefetch weights to the persistent volume ==="
+MODELS=${MODELS:-"meta-llama/Llama-3.2-1B-Instruct"}
+for m in $MODELS; do
+  python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('$m', allow_patterns=['*.safetensors', '*.json', '*.model', 'tokenizer*'])
+print('cached $m')
+"
+done
+
+echo "=== ShareGPT trace (the benchmark dataset vLLM itself uses) ==="
+# Onto the persistent volume too, and symlinked into the repo: 650MB re-downloaded
+# every session at $2/hr is exactly the kind of waste this script exists to prevent.
+DATA_DIR="$VOLUME/data"
+mkdir -p "$DATA_DIR" data
+SHAREGPT="$DATA_DIR/ShareGPT_V3_unfiltered_cleaned_split.json"
+if [ ! -f "$SHAREGPT" ]; then
+  curl -L -o "$SHAREGPT" \
