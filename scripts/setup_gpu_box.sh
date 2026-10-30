@@ -73,3 +73,23 @@ mkdir -p "$DATA_DIR" data
 SHAREGPT="$DATA_DIR/ShareGPT_V3_unfiltered_cleaned_split.json"
 if [ ! -f "$SHAREGPT" ]; then
   curl -L -o "$SHAREGPT" \
+    "https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json"
+fi
+ln -sf "$SHAREGPT" data/ShareGPT_V3_unfiltered_cleaned_split.json
+echo "sharegpt: $(du -h "$SHAREGPT" | cut -f1)"
+
+echo "=== smoke test ==="
+python -m pytest tests/ -q -x
+python -c "
+import torch
+from paged_inference_engine.config import EngineConfig
+from paged_inference_engine.engine import LLMEngine
+from paged_inference_engine.sampling import SamplingParams
+e = LLMEngine(EngineConfig.from_yaml('configs/default.yaml'))
+o = e.generate(prompts=['The capital of France is'], sampling_params=SamplingParams(temperature=0.0, max_tokens=16))
+print('generated:', repr(o[0].text))
+"
+
+echo
+echo "done. HF_HOME=$HF_HOME"
+echo "next:  make test-gpu      # the correctness oracle against HF"
