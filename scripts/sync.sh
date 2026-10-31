@@ -17,3 +17,23 @@ REMOTE_DIR=${REMOTE_DIR:-/workspace/paged-inference-engine}
 # macOS ships BSD grep, which has no -P. Parse with awk so this runs on the MacBook
 # you actually develop on, not just on Linux.
 # shellcheck disable=SC2086
+HOST=$(echo $BOX | awk '{print $1}')
+# shellcheck disable=SC2086
+PORT=$(echo $BOX | awk '{for(i=1;i<NF;i++) if($i=="-p") {print $(i+1); exit}} END{}')
+PORT=${PORT:-22}
+SSH="ssh -p $PORT -o StrictHostKeyChecking=no"
+
+EXCLUDES=(--exclude '.git' --exclude '__pycache__' --exclude '*.egg-info'
+          --exclude '.pytest_cache' --exclude 'data' --exclude '.venv'
+          --exclude 'results' --exclude '*.nsys-rep' --exclude '*.ncu-rep')
+
+if [[ "${1:-push}" == "pull" ]]; then
+  rsync -avz -e "$SSH" "$HOST:$REMOTE_DIR/results/" ./results/
+  rsync -avz -e "$SSH" "$HOST:$REMOTE_DIR/docs/figures/" ./docs/figures/
+  echo "pulled results"
+else
+  $SSH "$HOST" "mkdir -p $REMOTE_DIR"
+  rsync -avz --delete "${EXCLUDES[@]}" -e "$SSH" ./ "$HOST:$REMOTE_DIR/"
+  echo "pushed to $HOST:$REMOTE_DIR"
+  echo "  $SSH $HOST 'cd $REMOTE_DIR && make test'"
+fi
