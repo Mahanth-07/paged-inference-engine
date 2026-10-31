@@ -19,3 +19,23 @@ What to look for in the nsys timeline, and what each thing means:
     in the whole project.
   * A fat block of CPU time before each step. That is prepare_inputs building Python
     lists; it should be a few hundred microseconds, not milliseconds.
+  * cudaMemcpyAsync followed immediately by a sync. That is a .item() or .tolist()
+    somewhere in the hot path serialising the pipeline.
+  * The lm_head GEMM dominating a prefill step. That means compute_logits is running
+    over every batched token instead of just the ones that need a token.
+"""
+
+from __future__ import annotations
+
+import argparse
+import time
+
+import torch
+
+from paged_inference_engine.config import CacheConfig, EngineConfig, ModelConfig, SchedulerConfig
+from paged_inference_engine.engine import LLMEngine
+from paged_inference_engine.sampling import SamplingParams
+
+
+def build(args, eager=True) -> LLMEngine:
+    return LLMEngine(EngineConfig(
