@@ -59,3 +59,23 @@ def _fill(engine, batch: int, prompt_len: int, max_tokens: int = 10_000) -> None
 
 
 def cmd_timeline(args) -> None:
+    engine = build(args, eager=not args.cuda_graphs)
+    _fill(engine, args.batch, args.prompt_len)
+    torch.cuda.synchronize()
+    torch.cuda.cudart().cudaProfilerStart()
+    for _ in range(args.steps):
+        engine.step()
+    torch.cuda.synchronize()
+    torch.cuda.cudart().cudaProfilerStop()
+    print(f"profiled {args.steps} decode steps at batch {args.batch}")
+
+
+def cmd_kernel(args) -> None:
+    """Isolate the decode kernel so ncu profiles it and nothing else."""
+    from paged_inference_engine.kernels.paged_attention_triton import paged_attention_decode
+
+    b, ctx, h, kvh, d, bs = (args.batch, args.context, args.num_heads,
+                             args.num_kv_heads, args.head_dim, args.block_size)
+    pages = (ctx + bs - 1) // bs
+    nb = pages * b + 8
+    bt = torch.randperm(nb)[:pages * b].view(b, pages).to(torch.int32).cuda()
