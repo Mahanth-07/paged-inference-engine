@@ -93,3 +93,4 @@ print('generated:', repr(o[0].text))
 echo
 echo "done. HF_HOME=$HF_HOME"
 echo "next:  make test-gpu      # the correctness oracle against HF"
+echo "       make bench         # the full sweep, ~2h unattended"
