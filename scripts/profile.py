@@ -39,3 +39,23 @@ from paged_inference_engine.sampling import SamplingParams
 
 def build(args, eager=True) -> LLMEngine:
     return LLMEngine(EngineConfig(
+        model=ModelConfig(model=args.model, dtype=args.dtype,
+                          max_model_len=args.max_model_len),
+        cache=CacheConfig(block_size=args.block_size, num_gpu_blocks=args.num_gpu_blocks),
+        scheduler=SchedulerConfig(max_num_batched_tokens=args.max_num_batched_tokens,
+                                  max_num_seqs=max(args.batch, 8)),
+        attention_backend=args.backend, device="cuda", enforce_eager=eager,
+    ))
+
+
+def _fill(engine, batch: int, prompt_len: int, max_tokens: int = 10_000) -> None:
+    """Drive the engine into steady-state decode with `batch` live sequences."""
+    sp = SamplingParams(temperature=0.0, max_tokens=max_tokens, ignore_eos=True)
+    for i in range(batch):
+        engine.add_request(prompt_token_ids=[100 + (i % 500)] * prompt_len,
+                           sampling_params=sp)
+    while any(s.is_prefill for s in engine.scheduler.running) or engine.scheduler.waiting:
+        engine.step()
+
+
+def cmd_timeline(args) -> None:
