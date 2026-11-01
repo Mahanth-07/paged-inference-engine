@@ -121,3 +121,24 @@ def cmd_breakdown(args) -> None:
             engine = build(argparse.Namespace(**{**vars(args), "batch": batch}), eager=eager)
             _fill(engine, batch, args.prompt_len)
             runner, bm = engine.model_runner, engine.block_manager
+
+            for _ in range(5):
+                engine.step()
+            torch.cuda.synchronize()
+
+            t_prep = t_step = t_fwd = 0.0
+            n = args.steps
+            for _ in range(n):
+                sched = engine.scheduler.schedule()
+                torch.cuda.synchronize()
+                t0 = time.perf_counter()
+                mi, out_seqs = runner.prepare_inputs(sched, bm)
+                t1 = time.perf_counter()
+                with torch.inference_mode():
+                    graph = runner._maybe_graph(mi)
+                    if graph is not None:
+                        logits = graph.replay(mi)
+                    else:
+                        h = runner.model(mi.input_ids, mi.positions, runner.kv_caches, mi)
+                        logits = runner.model.compute_logits(h, mi.logits_indices)
+                torch.cuda.synchronize()
