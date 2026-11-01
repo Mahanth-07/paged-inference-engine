@@ -142,3 +142,23 @@ def cmd_breakdown(args) -> None:
                         h = runner.model(mi.input_ids, mi.positions, runner.kv_caches, mi)
                         logits = runner.model.compute_logits(h, mi.logits_indices)
                 torch.cuda.synchronize()
+                t2 = time.perf_counter()
+                tokens = runner.sampler(logits, [s.sampling_params for s in out_seqs])
+                for seq, tid in zip(out_seqs, tokens.tolist()):
+                    seq.append_token(tid)
+                engine.scheduler.free_finished(engine.eos_token_id)
+                t3 = time.perf_counter()
+                t_prep += t1 - t0
+                t_fwd += t2 - t1
+                t_step += t3 - t0
+
+            step_ms = t_step / n * 1000
+            print(f"{batch:>6} {mode:>12} {step_ms:>9.3f} {t_prep/n*1000:>9.3f} "
+                  f"{t_fwd/n*1000:>9.3f} {100*t_fwd/t_step:>8.1f}% "
+                  f"{batch/(t_step/n):>9.0f}")
+            del engine
+            torch.cuda.empty_cache()
+
+
+def main():
+    ap = argparse.ArgumentParser()
