@@ -50,3 +50,23 @@ A second invariant, less obvious and the source of the subtlest bug in the proje
 Everything about chunked prefill, preemption, and slot mapping falls out of that line.
 
 ---
+
+## 1. Why paging
+
+Static KV allocation reserves `max_model_len` per sequence. A request that generates 50
+tokens against a 4096-token reservation wastes 98.8% of its allocation. Concurrency is
+bounded by KV memory, so that waste is a direct throughput ceiling — you do not run out
+of compute, you run out of places to put K and V.
+
+Paging allocates 16 tokens at a time:
+
+- **Internal fragmentation** drops to at most one partly-filled block per sequence
+  (≤ 15 tokens, vs. thousands).
+- **External fragmentation** disappears entirely: all blocks are the same size and
+  therefore interchangeable, so there is no such thing as a hole too small to use.
+- **Blocks become shareable.** Two sequences can point at the same physical block. That
+  is what makes prefix caching (and forking, for beam search) possible at all, and it
+  is why the allocator is refcounted rather than a plain free list.
+
+The cost is that K and V for one sequence are no longer contiguous in memory, so the
+attention kernel has to gather through a block table. That cost is the subject of §4.
