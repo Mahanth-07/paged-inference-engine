@@ -33,3 +33,24 @@ sim-sweep:      ## scheduler simulator, rate sweep -- run this on your laptop, f
 
 serve:          ## start the OpenAI-compatible server (GPU box)
 	python -m paged_inference_engine.entrypoints.api_server --model $(MODEL) --port 8000
+
+bench:          ## full GPU benchmark sweep (rented box only, ~2h)
+	bash bench/run_sweep.sh 2>&1 | tee results/sweep.log
+
+bench-quick:    ## short sweep for sanity-checking the harness before spending 2h
+	RATES="4 16" NUM_PROMPTS=100 REPEATS=1 bash bench/run_sweep.sh
+
+micro:          ## attention + fused-kernel microbenchmarks (GPU)
+	python -m bench.microbench_attention
+	python -m bench.microbench_kernels
+
+profile:        ## step-time breakdown: where the launch overhead is (GPU)
+	python scripts/profile.py breakdown
+
+plot:           ## regenerate figures from existing results/
+	python -m bench.plot --results results --out docs/figures
+
+lint:
+	ruff check paged_inference_engine bench tests scripts
+
+sync:           ## rsync this tree to $BOX
