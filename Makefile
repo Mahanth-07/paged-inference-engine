@@ -54,3 +54,12 @@ lint:
 	ruff check paged_inference_engine bench tests scripts
 
 sync:           ## rsync this tree to $BOX
+	bash scripts/sync.sh
+
+sync-pull:      ## pull results/ and docs/figures/ back from $BOX
+	bash scripts/sync.sh pull
+
+clean:
+	find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; rm -rf .pytest_cache build *.egg-info
+
+MODEL ?= meta-llama/Llama-3.2-1B-Instruct
