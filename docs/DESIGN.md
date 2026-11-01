@@ -30,3 +30,23 @@ first two.
           │ BlockManager             │   │ Model (Llama)              │
           │  BlockAllocator (free    │   │  RMSNorm, RoPE, SwiGLU     │
           │   list, refcounts, LRU)  │   │  PagedAttention layer      │
+          │  BlockTable per sequence │   │   ├ reshape_and_cache      │
+          │  prefix-cache hash map   │   │   ├ prefill: paged varlen  │
+          └──────────────────────────┘   │   └ decode: paged kernel   │
+                                         └────────────────────────────┘
+```
+
+**The single most important invariant:** the scheduler never admits work the block
+manager cannot back with physical blocks. Every scheduling decision is a memory
+decision, and the two components are deliberately coupled through one narrow interface
+(`can_allocate` / `can_append_slot`) so that coupling is explicit rather than emergent.
+
+A second invariant, less obvious and the source of the subtlest bug in the project:
+
+> For a sequence in decode, KV exists for positions `[0, total_len - 1)`, and
+> `num_computed_tokens == total_len`. The token at `total_len - 1` is the one sampled
+> last step; its KV is written by the *next* forward pass.
+
+Everything about chunked prefill, preemption, and slot mapping falls out of that line.
+
+---
