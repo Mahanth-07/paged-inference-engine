@@ -100,3 +100,24 @@ def cmd_kernel(args) -> None:
     dt = (time.perf_counter() - t0) / n
     print(f"decode kernel: {dt*1e6:.1f} us, {kv_bytes/dt/1e9:.0f} GB/s effective")
     print("Decode attention is memory bound -- compare that against the device's peak "
+          "HBM bandwidth, not against its TFLOPs.")
+
+
+def cmd_breakdown(args) -> None:
+    """Where the step time goes, without needing nsys installed.
+
+    Splits a decode step into: input preparation (pure Python/host), the model forward,
+    and sampling. The interesting column is `gpu busy %` -- at batch size 1 on a 1B
+    model it is usually well under half, and that gap IS the launch overhead that CUDA
+    graphs remove.
+    """
+    print(f"{'batch':>6} {'mode':>12} {'step ms':>9} {'prep ms':>9} {'fwd ms':>9} "
+          f"{'gpu busy':>9} {'tok/s':>9}")
+    print("-" * 68)
+    for batch in args.batches:
+        for mode, eager in (("eager", True), ("cuda graphs", False)):
+            if mode == "cuda graphs" and args.backend == "flashinfer":
+                continue
+            engine = build(argparse.Namespace(**{**vars(args), "batch": batch}), eager=eager)
+            _fill(engine, batch, args.prompt_len)
+            runner, bm = engine.model_runner, engine.block_manager
