@@ -162,3 +162,23 @@ def cmd_breakdown(args) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("cmd", choices=["timeline", "kernel", "breakdown"])
+    ap.add_argument("--model", default="meta-llama/Llama-3.2-1B-Instruct")
+    ap.add_argument("--backend", default="triton",
+                    choices=["naive", "flashinfer", "flash_attn", "triton"])
+    ap.add_argument("--dtype", default="bfloat16")
+    ap.add_argument("--batch", type=int, default=1)
+    ap.add_argument("--batches", type=int, nargs="+", default=[1, 8, 64])
+    ap.add_argument("--steps", type=int, default=50)
+    ap.add_argument("--prompt-len", type=int, default=512)
+    ap.add_argument("--context", type=int, default=4096)
+    ap.add_argument("--block-size", type=int, default=16)
+    ap.add_argument("--num-gpu-blocks", type=int, default=8192)
+    ap.add_argument("--max-model-len", type=int, default=4096)
+    ap.add_argument("--max-num-batched-tokens", type=int, default=8192)
+    ap.add_argument("--num-heads", type=int, default=32)
+    ap.add_argument("--num-kv-heads", type=int, default=8)
+    ap.add_argument("--head-dim", type=int, default=64)
+    ap.add_argument("--split-k", type=int, default=None)
+    ap.add_argument("--cuda-graphs", action="store_true")
+    args = ap.parse_args()
