@@ -79,3 +79,24 @@ def cmd_kernel(args) -> None:
     pages = (ctx + bs - 1) // bs
     nb = pages * b + 8
     bt = torch.randperm(nb)[:pages * b].view(b, pages).to(torch.int32).cuda()
+    kc = torch.randn(nb, bs, kvh, d, dtype=torch.float16, device="cuda")
+    vc = torch.randn_like(kc)
+    q = torch.randn(b, h, d, dtype=torch.float16, device="cuda")
+    cl = torch.full((b,), ctx, dtype=torch.int32, device="cuda")
+    for _ in range(5):
+        paged_attention_decode(q, kc, vc, bt, cl, d ** -0.5, split_k=args.split_k)
+    torch.cuda.synchronize()
+    torch.cuda.cudart().cudaProfilerStart()
+    paged_attention_decode(q, kc, vc, bt, cl, d ** -0.5, split_k=args.split_k)
+    torch.cuda.synchronize()
+    torch.cuda.cudart().cudaProfilerStop()
+
+    kv_bytes = b * ctx * kvh * d * 2 * 2
+    n = 50
+    t0 = time.perf_counter()
+    for _ in range(n):
+        paged_attention_decode(q, kc, vc, bt, cl, d ** -0.5, split_k=args.split_k)
+    torch.cuda.synchronize()
+    dt = (time.perf_counter() - t0) / n
+    print(f"decode kernel: {dt*1e6:.1f} us, {kv_bytes/dt/1e9:.0f} GB/s effective")
+    print("Decode attention is memory bound -- compare that against the device's peak "
