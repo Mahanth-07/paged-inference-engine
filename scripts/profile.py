@@ -182,3 +182,10 @@ def main():
     ap.add_argument("--split-k", type=int, default=None)
     ap.add_argument("--cuda-graphs", action="store_true")
     args = ap.parse_args()
+    if not torch.cuda.is_available():
+        raise SystemExit("needs a GPU")
+    {"timeline": cmd_timeline, "kernel": cmd_kernel, "breakdown": cmd_breakdown}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    main()
