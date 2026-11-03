@@ -70,3 +70,23 @@ Paging allocates 16 tokens at a time:
 
 The cost is that K and V for one sequence are no longer contiguous in memory, so the
 attention kernel has to gather through a block table. That cost is the subject of §4.
+
+### Sizing
+
+```
+bytes_per_block = 2 (K and V) × block_size × num_kv_heads × head_dim × dtype_bytes × num_layers
+num_blocks      = (total_vram × utilization − weights − activation_peak) / bytes_per_block
+```
+
+`activation_peak` is **measured**, not guessed: `ModelRunner.profile_num_blocks()` runs
+one forward pass at exactly `max_num_batched_tokens` and reads
+`torch.cuda.max_memory_allocated()`. Guessing here is the classic source of "works at
+batch 8, OOMs at batch 64", because the peak scales with the batch width and a constant
+guess is only right at one width.
+
+---
+
+## 2. Block manager
+
+### The three states of a block
+
