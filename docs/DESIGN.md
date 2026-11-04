@@ -151,3 +151,24 @@ which decode, and which get preempted, under three simultaneous budgets:
 2. **Preempt from the tail** of the running list when the cache is full. Preempting the
    *oldest* sequence would throw away the most computed work.
 3. **Resume partially-prefilled sequences** before admitting new ones, so a chunked
+   prompt cannot be starved by a stream of new arrivals.
+4. **Admit from the waiting queue**, strictly FCFS. Skipping ahead past a request that
+   does not fit is how you build a starvation bug that only appears under load.
+
+### Continuous vs static batching
+
+Static batching (what HF `generate` does) picks N prompts and runs until the *longest*
+one finishes. Every sequence that finished early holds its slot for the rest of the
+batch. `bench/baselines/hf_generate.py` measures this directly:
+
+```
+batch_utilization = sum(output_lens) / (batch_size × max(output_lens))
+```
+
+On ShareGPT that is routinely under 40%. That single number is the entire argument for
+continuous batching, and it is far more persuasive than a speedup ratio because it
+explains *where* the speedup comes from.
+
+Continuous batching reschedules every forward pass: a sequence that hits EOS is evicted
+immediately and a waiting request takes its slot on the very next step.
+
