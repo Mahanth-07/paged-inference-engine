@@ -130,3 +130,24 @@ Reusing a cached block also *requires* skipping its prefill — `num_computed_to
 advanced past the reused prefix. That is not only the throughput win; it is a
 correctness requirement, because a reused block may be shared with a live sequence and
 recomputing into it would corrupt that reader.
+
+Finally, the cacheable prefix is capped at `(prompt_len - 1) // block_size` blocks. A
+sequence whose *entire* prompt came from the cache would have nothing to compute, go
+straight to the decode queue, and never produce a first token.
+
+---
+
+## 3. Scheduler
+
+`Scheduler.schedule()` runs once per forward pass and returns which sequences prefill,
+which decode, and which get preempted, under three simultaneous budgets:
+`max_num_batched_tokens`, `max_num_seqs`, and free blocks.
+
+### Order of operations, and why
+
+1. **Decodes first.** Running sequences have already paid their TTFT; starving them
+   spikes ITL, which users feel far more than a slightly worse TTFT. (Flip this with
+   the simulator and watch the TTFT/ITL trade move — it is a five-second experiment.)
+2. **Preempt from the tail** of the running list when the cache is full. Preempting the
+   *oldest* sequence would throw away the most computed work.
+3. **Resume partially-prefilled sequences** before admitting new ones, so a chunked
