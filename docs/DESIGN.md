@@ -110,3 +110,23 @@ same system prompt arrives.
 `append_slot()` returns a `(src, dst)` pair when the sequence's last block is shared and
 is about to be written. The engine performs the copy across every layer's cache
 **before** the forward pass, because the forward pass is what writes the new K/V. Doing
+it after would corrupt whoever else is still reading that block.
+
+### Prefix caching, and the two rules that make it correct
+
+1. **Hashes are chained.** `hash(block_i) = hash(hash(block_{i-1}), tokens_i)`. Without
+   chaining, the same 16 tokens hash identically whether they are the first block of a
+   document or the fifth — but KV depends on the entire preceding context, so two
+   sequences with matching block content and different prefixes would share KV and the
+   output would be silently wrong. The chain makes the hash identify the whole *prefix*
+   ending at that block, which is the thing that actually determines the KV.
+
+2. **Publish only after computing.** A block's hash is registered *after* the forward
+   pass that filled it, never at allocation time. Registering early lets a concurrent
+   request hit the hash and read KV that has not been written yet. Both rules have a
+   dedicated test; the second one is invisible until you have two requests in flight.
+
+Reusing a cached block also *requires* skipping its prefill — `num_computed_tokens` is
+advanced past the reused prefix. That is not only the throughput win; it is a
+correctness requirement, because a reused block may be shared with a live sequence and
+recomputing into it would corrupt that reader.
