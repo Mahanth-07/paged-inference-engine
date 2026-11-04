@@ -90,3 +90,23 @@ guess is only right at one width.
 
 ### The three states of a block
 
+Most descriptions of paged attention give a block two states. It needs three, and the
+third is what makes prefix caching work across requests rather than only within one.
+
+| state | meaning |
+|---|---|
+| **allocated** | refcount ≥ 1; somebody is reading or writing it |
+| **free** | nobody wants it; contents are garbage |
+| **evictable** | refcount hit 0, but the block still holds valid content under a known hash |
+
+An evictable block is available — `allocate()` will take it when the free list is empty,
+LRU-first — but until the memory is actually needed, a later request with the same
+prefix can reclaim it for free. Without this state the cache is emptied every time a
+request finishes, which on a chat workload is exactly when the next request with the
+same system prompt arrives.
+
+### Copy-on-write
+
+`append_slot()` returns a `(src, dst)` pair when the sequence's last block is shared and
+is about to be written. The engine performs the copy across every layer's cache
+**before** the forward pass, because the forward pass is what writes the new K/V. Doing
