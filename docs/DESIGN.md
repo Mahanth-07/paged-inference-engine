@@ -172,3 +172,23 @@ explains *where* the speedup comes from.
 Continuous batching reschedules every forward pass: a sequence that hits EOS is evicted
 immediately and a waiting request takes its slot on the very next step.
 
+### Chunked prefill
+
+Without it, one 2000-token prompt monopolises a step and every decoding sequence stalls
+behind it — a single ITL spike of tens of milliseconds, right in the p99. With it,
+prefill is capped per step and mixed with decodes in the same batch.
+
+The correctness consequence is the one thing to get right: a chunk's queries sit at
+absolute positions `ctx - q_len .. ctx - 1`, not `0 .. q_len - 1`. Causal masking must
+therefore be **bottom-right aligned**. Top-left alignment (`is_causal=True` on a naive
+SDPA call) passes the first chunk and is wrong for every chunk after it, while producing
+output that still reads fine.
+
+There is also a failure mode *without* chunked prefill worth knowing: a prompt longer
+than `max_num_batched_tokens` can never be scheduled at all, and under strict FCFS it
+would block every request behind it forever. So the scheduler rejects it at admission
+rather than stalling on it — a clear error beats a silent hang, and the requests behind
+it still complete. Measured on a lognormal trace at 12 req/s with a 1024-token budget:
+
+```
+     --chunked-prefill:   2084.6 tok/s | completed 150/150 | rejected 0
