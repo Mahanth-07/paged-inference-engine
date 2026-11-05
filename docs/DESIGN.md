@@ -213,3 +213,23 @@ Recompute beats swap-to-CPU on modern hardware because prefill is compute-bound 
 massively parallel, whereas a swap is a PCIe round trip of the entire context in both
 directions — and recompute frees the blocks *immediately*, which is the resource you
 were short of.
+
+The bug that lives here, and which this project actually hit: a preempted sequence must
+recompute its **prompt and its already-generated tokens**, not just the prompt. Bounding
+the re-prefill by `prompt_len` leaves a hole in the cache from the preemption point
+onward, and the output stays completely fluent. `is_prefill` is therefore
+`num_computed_tokens < total_len`, and `test_preemption_is_output_preserving` exists
+specifically to catch it.
+
+---
+
+## 4. Attention
+
+Four backends, all producing identical greedy output (`test_all_backends_agree`):
+
+| backend | prefill | decode | role |
+|---|---|---|---|
+| `naive` | gather blocks → SDPA | gather blocks → SDPA | the oracle; runs on CPU |
+| `flashinfer` | `BatchPrefillWithPagedKVCacheWrapper` | `BatchDecodeWithPagedKVCacheWrapper` | fast, unblocks M3/M4 |
+| `flash_attn` | `flash_attn_varlen_func` + block table | `flash_attn_with_kvcache` | second opinion |
+| `triton` | our FA2-style paged prefill kernel | our paged decode kernel | the point of the exercise |
