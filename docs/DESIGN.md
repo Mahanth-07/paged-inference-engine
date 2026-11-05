@@ -233,3 +233,23 @@ Four backends, all producing identical greedy output (`test_all_backends_agree`)
 | `flashinfer` | `BatchPrefillWithPagedKVCacheWrapper` | `BatchDecodeWithPagedKVCacheWrapper` | fast, unblocks M3/M4 |
 | `flash_attn` | `flash_attn_varlen_func` + block table | `flash_attn_with_kvcache` | second opinion |
 | `triton` | our FA2-style paged prefill kernel | our paged decode kernel | the point of the exercise |
+
+The `naive` backend is not scaffolding to be deleted. It differs from the fast kernels
+in exactly one way — it does not touch the block table during the math — which is what
+makes it a useful oracle when paged output goes subtly wrong.
+
+FlashInfer's wrappers are owned by `AttentionState` on the `ModelRunner`, not by the
+attention layers, because `plan()` depends only on the step's page table and not on the
+layer. Planning once per step instead of once per layer is a 16× reduction in that cost
+on a 1B model.
+
+### The decode kernel
+
+Decode has query length 1. There is no large GEMM; it is a memory sweep over the KV
+cache, and arithmetic intensity is roughly the batch size. So it is **memory bound**, and
+the optimisation target is percent of peak HBM bandwidth, not TFLOPs.
+`bench/microbench_attention.py` reports achieved GB/s against a *measured* device
+ceiling, which is the honest way to state it.
+
+Two design decisions carry most of the performance:
+
