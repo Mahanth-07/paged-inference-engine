@@ -192,3 +192,24 @@ it still complete. Measured on a lognormal trace at 12 req/s with a 1024-token b
 
 ```
      --chunked-prefill:   2084.6 tok/s | completed 150/150 | rejected 0
+  --no-chunked-prefill:   1770.6 tok/s | completed 129/150 | rejected 21
+```
+
+14% of a realistic trace is simply unservable without chunking. The simulator reports
+completions and rejections alongside throughput for exactly this reason: a run that
+dropped a seventh of its workload must not be able to look merely "a bit slower".
+
+Rejected requests are drained by the engine every step and turned into a finished
+`RequestOutput` with `finish_reason="ignored"`. The alternative — dropping the sequence
+silently, which the scaffold's `AllocStatus.NEVER` path did — leaves an HTTP client
+hanging until it times out, which is a much worse failure and much harder to debug.
+
+### Preemption
+
+Recompute-based: drop the blocks, keep the generated tokens, re-add to the *front* of
+the waiting queue (it has already waited once), and re-prefill on readmission.
+
+Recompute beats swap-to-CPU on modern hardware because prefill is compute-bound and
+massively parallel, whereas a swap is a PCIe round trip of the entire context in both
+directions — and recompute frees the blocks *immediately*, which is the resource you
+were short of.
