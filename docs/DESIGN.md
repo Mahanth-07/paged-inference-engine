@@ -316,3 +316,23 @@ Two efficiency notes that are easy to get wrong and expensive to leave wrong:
 - **Logits are computed only where needed** — the last token of each completed prefill,
   plus every decode. Running a 128k-vocab `lm_head` over all 8192 batched tokens instead
   of the ~64 positions that need one is the largest GEMM in the step, and almost all of
+  it would be thrown away.
+- **One host→device copy per tensor**, from a pinned buffer, built from flat Python
+  lists. A per-sequence `.to(device)` is a sync per sequence and dominates the profile
+  at batch 256.
+
+---
+
+## 6. CUDA graphs
+
+At batch size 1 on a 1B model, roughly 16 layers × ~8 kernels each are launched per
+step, every one of them a few microseconds of GPU work sitting behind a few microseconds
+of launch. The GPU is idle for much of the timeline, and `scripts/profile.py breakdown`
+shows it as a low "gpu busy %" without needing nsys installed.
+
+A captured graph replays the entire decode step as one submission. The requirements that
+bite, all handled by `CUDAGraphRunner`:
+
+- Every input tensor is preallocated at max shape and reused — a graph captures
+  *pointers*, not values.
+- No CPU↔GPU sync inside the captured region, which is why `split_k` is pinned to 1
