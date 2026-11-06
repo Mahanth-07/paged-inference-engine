@@ -295,3 +295,24 @@ Every one of these has a dedicated test in `tests/test_paged_attention.py`:
   growing error is the signature.
 - **Non-contiguous block tables.** Every fixture shuffles its block ids. A fixture with
   contiguous blocks passes even with a completely broken block-table lookup, which
+  defeats the entire purpose of the test.
+
+---
+
+## 5. The step, end to end
+
+```
+Scheduler.schedule()              → SchedulerOutput (prefills, decodes, preempted, CoW)
+copy_blocks(...)                  → resolve copy-on-write BEFORE anything writes K/V
+ModelRunner.prepare_inputs(...)   → one flat batch: [prefill tokens | decode tokens]
+AttentionState.plan(...)          → once per step, not once per layer
+model.forward(...)                → reshape_and_cache → prefill attn → decode attn
+model.compute_logits(...)         → ONLY at logits_indices
+Sampler(...)                      → batched; one .tolist() sync per step
+```
+
+Two efficiency notes that are easy to get wrong and expensive to leave wrong:
+
+- **Logits are computed only where needed** — the last token of each completed prefill,
+  plus every decode. Running a 128k-vocab `lm_head` over all 8192 batched tokens instead
+  of the ~64 positions that need one is the largest GEMM in the step, and almost all of
