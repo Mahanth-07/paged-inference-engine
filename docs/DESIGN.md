@@ -336,3 +336,23 @@ bite, all handled by `CUDAGraphRunner`:
 - Every input tensor is preallocated at max shape and reused — a graph captures
   *pointers*, not values.
 - No CPU↔GPU sync inside the captured region, which is why `split_k` is pinned to 1
+  during capture (the auto-selector reads `context_lens.max()` on the host).
+- Padded rows must be *harmless*. `allocate_kv_cache` reserves one extra scratch block
+  past the pool the `BlockManager` knows about; padding rows write their garbage K/V
+  there and read a context length of 1. That is a branch-free way to make padding safe
+  in every backend, and it costs one block.
+- Graphs share one memory pool, so capturing 13 buckets does not cost 13 activation
+  workspaces.
+
+---
+
+## 7. What's missing
+
+Current limitations:
+
+- **Tensor / pipeline parallelism.** Single GPU only. Adding TP means sharding the
+  attention and MLP weights and an NCCL all-reduce per layer; the block manager is
+  unaffected, which is a nice property of the design.
+- **Quantization.** No AWQ/GPTQ weights, no FP8 KV cache. The KV cache dtype is already
+  a config knob (`kv_cache_dtype`), so FP8 KV is mostly a kernel change.
+- **MoE.** No expert routing.
