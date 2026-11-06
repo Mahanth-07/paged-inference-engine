@@ -274,3 +274,24 @@ coalesce, and the page size becomes a pure memory-policy knob with no kernel
 consequences — which is what makes the block-size ablation meaningful.
 
 **Flash-decoding (split-K).** The v1 grid is `num_seqs × num_kv_heads` programs. At batch
+size 1 with 8 KV heads that is 8 programs on a 108-SM GPU: 93% of the machine idle.
+`_paged_attn_decode_split_kernel` splits each sequence's KV across `SPLIT_K` programs,
+each producing a partial `(acc, m, l)`, and `_combine_kernel` merges them with the usual
+log-sum-exp rescale. `choose_split_k()` picks the split from the grid size and the SM
+count, rounded down to a power of two (the combine kernel indexes splits with
+`tl.arange`, which requires one).
+
+### Where the bugs live
+
+Every one of these has a dedicated test in `tests/test_paged_attention.py`:
+
+- **Partial last block.** A context length that is not a multiple of `block_size` leaves
+  garbage in the tail of the last page. `test_partial_last_block_is_masked` poisons that
+  tail and asserts the output does not move.
+- **GQA head mapping.** `test_gqa_head_mapping` fills KV head *g* with the constant *g*,
+  so the output for query head *h* literally *is* the index of the head it read.
+- **fp16 accumulation.** Accumulate in fp32 or the error grows with context length.
+  `test_fp32_accumulation_at_long_context` compares the error at 1k and 8k tokens; a
+  growing error is the signature.
+- **Non-contiguous block tables.** Every fixture shuffles its block ids. A fixture with
+  contiguous blocks passes even with a completely broken block-table lookup, which
