@@ -253,3 +253,24 @@ ceiling, which is the honest way to state it.
 
 Two design decisions carry most of the performance:
 
+**GQA head packing.** One program handles one `(sequence, kv_head)` pair and processes
+all `GQA_RATIO` query heads that share that KV head together. They read the same K and V,
+so this turns `GQA_RATIO` separate sweeps of the cache into one. On Llama-3.2-1B (ratio
+4) that is a 4× cut in KV traffic, and KV traffic is essentially the entire cost.
+
+**The KV tile is decoupled from the page size.** A tile gathers `TILE_KV // block_size`
+pages at once:
+
+```
+idx      = arange(TILE_KV)
+page     = block_table[seq, t * pages_per_tile + idx // block_size]
+offset   = idx % block_size
+address  = page * stride_page + offset * stride_token + kv_head * stride_head
+```
+
+This is a fully general gather, which buys three things: `block_size = 8` works at all
+(a 8-wide `tl.dot` is illegal), 16-element loads become 64-element ones that actually
+coalesce, and the page size becomes a pure memory-policy knob with no kernel
+consequences — which is what makes the block-size ablation meaningful.
+
+**Flash-decoding (split-K).** The v1 grid is `num_seqs × num_kv_heads` programs. At batch
