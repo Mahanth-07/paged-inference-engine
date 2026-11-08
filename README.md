@@ -33,3 +33,24 @@ Llama weights may require accepting the model's license on Hugging Face.
 
 ```bash
 python -m pip install -e ".[dev,gpu]"
+paged-inference-engine generate --prompt "The capital of France is" --max-tokens 32
+```
+
+The Python API exposes the request queue and step loop:
+
+```python
+from paged_inference_engine import (
+    EngineConfig,
+    LLMEngine,
+    ModelConfig,
+    SamplingParams,
+)
+
+engine = LLMEngine(EngineConfig(
+    model=ModelConfig(model="meta-llama/Llama-3.2-1B-Instruct"),
+))
+engine.add_request(
+    prompt="The capital of France is",
+    sampling_params=SamplingParams(temperature=0.0, max_tokens=32),
+)
+while engine.has_unfinished_requests():
