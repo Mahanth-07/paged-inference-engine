@@ -54,3 +54,23 @@ and `ignore_eos` keep token counts comparable. Warmup requests are excluded.
 Use the same seed and prompts for each system, and report repeat variation.
 
 TTFT starts at request arrival and ends at the first chunk carrying token text.
+Metadata-only SSE chunks do not count. Streaming behavior can affect this
+measurement, so check the response format when adding another server.
+
+| Metric | Meaning |
+| --- | --- |
+| TTFT | Arrival to first token |
+| TPOT | Time after first token divided by remaining output tokens |
+| ITL | Time between output tokens |
+| E2EL | Arrival to completion |
+| Output throughput | Output tokens per second over the run |
+| Goodput | Requests per second meeting both latency limits |
+
+The default goodput limits are TTFT <= 500 ms and TPOT <= 50 ms.
+Report throughput alongside p99 latency: a saturated server can have high
+throughput while requests spend most of their time waiting.
+
+## Baselines
+
+- `vllm`: vLLM's server with matched configuration.
+- `hf_static`: Hugging Face generate with static batching.
