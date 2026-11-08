@@ -356,3 +356,9 @@ Current limitations:
 - **Quantization.** No AWQ/GPTQ weights, no FP8 KV cache. The KV cache dtype is already
   a config knob (`kv_cache_dtype`), so FP8 KV is mostly a kernel change.
 - **MoE.** No expert routing.
+- **Beam search / parallel sampling.** The allocator already supports it — `fork()` and
+  copy-on-write exist and are tested — but the scheduler and sampler do not expose it.
+- **Speculative decoding.** The scheduler would need to accept multi-token proposals per
+  step and the sampler an acceptance test.
+- **Disaggregated prefill/decode.** Would need KV transfer between engine instances.
+- **Multi-modal inputs, LoRA adapters, structured/guided decoding.**
