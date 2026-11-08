@@ -54,3 +54,24 @@ engine.add_request(
     sampling_params=SamplingParams(temperature=0.0, max_tokens=32),
 )
 while engine.has_unfinished_requests():
+    for output in engine.step():
+        print(output.delta_text, end="", flush=True)
+```
+
+## Serve
+
+```bash
+python -m paged_inference_engine.entrypoints.api_server \
+    --model meta-llama/Llama-3.2-1B-Instruct \
+    --port 8000 --backend flashinfer --cuda-graphs
+```
+
+The server implements OpenAI-compatible completions and chat completions, including
+SSE streaming. It also exposes `/health`, `/v1/models`, and `/metrics`.
+
+## How it fits together
+
+- `block_manager.py` owns physical cache blocks, reference counts, copy-on-write,
+  and prefix-cache eviction.
+- `scheduler.py` selects work for each forward pass under token and block budgets.
+  It uses FCFS admission, chunked prefill, and recompute-based preemption.
