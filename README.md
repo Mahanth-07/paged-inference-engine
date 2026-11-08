@@ -75,3 +75,23 @@ SSE streaming. It also exposes `/health`, `/v1/models`, and `/metrics`.
   and prefix-cache eviction.
 - `scheduler.py` selects work for each forward pass under token and block budgets.
   It uses FCFS admission, chunked prefill, and recompute-based preemption.
+- `model_runner.py` builds tensors, manages KV storage, and captures CUDA graphs.
+- `models/llama.py` implements the model; `models/reference.py` provides the
+  cacheless correctness reference.
+- `layers/attention.py` selects naive, FlashInfer, flash-attn, or Triton attention.
+- `kernels/` contains paged prefill/decode attention and fused elementwise ops.
+
+The scheduler must never admit work the block manager cannot allocate. Prefixes
+are shared only after their KV has been computed, and block hashes include the
+preceding context. More detail is in [the design notes](docs/DESIGN.md).
+
+## Benchmarks
+
+`bench/client.py` sends Poisson-arrival requests to this server or vLLM.
+`bench/baselines/hf_generate.py` runs Hugging Face static-batch baselines.
+The sweep varies request rate and reports throughput, tail latency, and goodput.
+
+On a configured GPU machine:
+
+```bash
+python -m pip install -e ".[dev,gpu,bench]"
