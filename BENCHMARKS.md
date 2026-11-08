@@ -115,3 +115,9 @@ Look for CPU input-preparation time, gaps between kernel launches, synchronizati
 and attention bandwidth. Record observations from the trace before attributing a
 performance gap to a particular component.
 
+## Simulator
+
+`bench/scheduler_sim.py` runs the allocator and scheduler with estimated model
+latencies. It is useful for exploring memory pressure and scheduling policy.
+Its throughput is a simulation result and should be labeled separately from GPU
+measurements.
