@@ -74,3 +74,23 @@ throughput while requests spend most of their time waiting.
 
 - `vllm`: vLLM's server with matched configuration.
 - `hf_static`: Hugging Face generate with static batching.
+- `hf_compile`: static cache with torch.compile.
+- `paged-inference-engine`: this engine.
+
+The Hugging Face runners are offline baselines. Their arrival and queueing model
+differs from the HTTP server runs; explain that difference when comparing them.
+
+## Ablations
+
+The sweep includes block sizes 8, 16, 32, and 64; chunked prefill; CUDA graphs;
+prefix caching; and a one-block-per-sequence configuration to examine paging.
+Use the same prompts and request rate within each comparison.
+
+Prefix-cache hit rates depend on request order and when completed blocks become
+available for sharing. Record the shared-prefix workload and cold-start behavior.
+
+## Kernel measurements
+
+```bash
+python -m bench.microbench_attention
+python -m bench.microbench_attention --prefill
