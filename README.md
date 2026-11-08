@@ -95,3 +95,24 @@ On a configured GPU machine:
 
 ```bash
 python -m pip install -e ".[dev,gpu,bench]"
+make test-gpu
+make bench
+```
+
+The sweep writes results under `results/` and figures under `docs/figures/`.
+See [BENCHMARKS.md](BENCHMARKS.md) for the run configuration, metrics, and
+ablations. Record the actual hardware and software versions with each run.
+
+## Limits
+
+This is a single-device engine. It does not implement tensor parallelism,
+quantization, MoE, speculative decoding, LoRA, or guided decoding. The allocator
+supports forking, but beam search is not exposed by the scheduler or sampler.
+GPU kernel correctness and performance still need validation on the target hardware.
+
+## References
+
+- [vLLM](https://github.com/vllm-project/vllm) and the PagedAttention paper
+- [nano-vllm](https://github.com/GeeeekExplorer/nano-vllm)
+- [FlashInfer KV-cache layout](https://docs.flashinfer.ai/tutorials/kv_layout.html)
+- Orca, SARATHI, FlashAttention-2, and Flash-Decoding
